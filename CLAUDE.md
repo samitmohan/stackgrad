@@ -37,6 +37,10 @@
   `uv run python scripts/export_paper.py ../portfolio/web` copies the results and replays into the site. A prose change
   here has to be made there too: export_paper.py fails when any section's paragraphs differ between the two (captions,
   figures, Head.tsx and kit.tsx may differ).
+- Karpathy rewrite (user, 2026-11-17): the post is being rewritten in Andrej Karpathy's voice and blog structure:
+  plain unnumbered headings, no glossary, citation block or reference list (inline links instead), cut to about 60%,
+  opinions in the user's voice allowed but no new facts, numbers or invented experiences. A local draft gets the user's
+  approval before either copy of the post changes; until then the paper-form rules above describe the live post.
 - Every gradient lives in `stackgrad/mlops.py`. Everything else composes those ops.
 - `TransformerLM(attn_res=True)` is Block Attention Residuals (DepthAttention in layers.py), an option only (user,
   2026-11-06): no retraining or measuring it. The paper's §5 says so in one paragraph and links the user's Attention

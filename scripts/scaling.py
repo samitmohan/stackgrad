@@ -30,7 +30,7 @@ def shape(d_model):
     return d_model // 32, d_ff, LAYERS * (4 * d_model ** 2 + 3 * d_model * d_ff) + VOCAB * d_model
 
 
-CS336_RUN = 6 * shape(512)[2] * 327_680_000  # the story model of §6: its matmul parameters x its tokens x 6
+CS336_RUN = 6 * shape(512)[2] * 327_680_000  # the story model of §5: its matmul parameters x its tokens x 6
 
 
 def run(device):

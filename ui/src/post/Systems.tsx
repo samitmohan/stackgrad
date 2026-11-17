@@ -22,14 +22,6 @@ export function Gpu() {
         <code>xp</code> that exposes the same dozen functions over its own kind of array, so one copy of every gradient runs
         everywhere, and one call, <code>model.to("metal")</code>, moves a model.
       </p>
-      <Aside title="Two quirks of MLX that shaped the engine">
-        <p>
-          Code cannot change an MLX array after creating it, so stackgrad never updates a gradient in place: adding to a
-          gradient makes a new array. MLX is also <b>lazy</b>. An operation records what to compute, and MLX runs the work when
-          code reads a value. Pending work keeps growing until something reads a result, so the optimizer computes the new
-          weights at the end of each step, or each step's pending work would pile onto the last.
-        </p>
-      </Aside>
       <p>
         <code>tests/backends.py</code> checks each GPU backend against NumPy. Of {int(bkM?.ops.total)} gradient checks,{" "}
         {int(bkM?.ops.agree)} agree on the Apple GPU and {bkC ? int(bkC.ops.agree) : "…"} on the NVIDIA GPU, and the story

@@ -1,0 +1,429 @@
+[OPENER: the summary paragraph and three headline numbers that sit above section 1 on the live page]
+stackgrad is a deep learning framework written from scratch in 3,350 lines of Python, built in the order a study plan would take: reverse-mode automatic differentiation, a transformer trained from nothing, GPU backends and attention kernels, a real pretrained model, a server, fine-tuning, and on top of it all the two applications most language-model systems exist for, retrieval-augmented generation and a tool-using agent. Each layer is checked against a reference. The gradients match PyTorch's to 1.8e-15; a 22.7M-parameter model trains on TinyStories to a validation loss of 1.399 in 71 minutes on one RTX 3090; and Qwen3-0.6B's logits match Hugging Face's to 5.1e-5. Through stackgrad's own server, retrieval puts the paragraph a SQuAD question was written from among its top three 91.5% of the time, and 55% of answers then contain the reference. Three attempts to make the model better at grade-school math failed: LoRA fine-tuning lost 29 of 250 problems (p = 0.0011), GRPO changed nothing measurable (p = 0.13), and a calculator tool lost 110 (p < 0.0001).
+Headline numbers: 1.8e-15 gap to PyTorch's loss at step 1; 1.399 validation loss on TinyStories; 6.7x faster than MLX's unfused attention.
+[CAPTION] Figure 1: Three results, each read from the project's result files. Left: stackgrad (thin blue) and PyTorch (wide pink) train the same model and their losses overlap step for step. Middle: the story model's validation loss over 40,000 training steps. Right: time to compute attention at the training shape, shorter is faster: my kernel in blue, MLX's in pink (it has no fused kernel for heads this narrow), earlier attempts in gray.
+Hardware: Apple M4 laptop, NVIDIA GeForce RTX 3090. Code: github.com/samitmohan/minitorch
+
+## 1Introduction
+Deep learning frameworks like PyTorch hide the parts worth understanding. You call loss.backward() and gradients appear. You move a model to a GPU and it gets faster, except when it gets slower. You download a chat model and it answers, and the steps between the bytes on disk and the words on screen stay out of sight.
+stackgrad rebuilds those parts in plain Python and checks each one against the library it imitates. I started where Andrej Karpathy's micrograd [1] starts, with a single number that computes its own gradient, and took tinygrad's design [2]: a short list of basic operations with known gradients, and everything else composed from them.
+The work follows the order a study plan would. Autograd comes first, then a language model trained from scratch, GPUs and kernels, a real pretrained model, a server, fine-tuning, and last the two applications most language-model systems are built for: retrieval-augmented generation, which answers from documents it looks up, and an agent that calls tools. That last step is the goal. A question goes in through an OpenAI-style endpoint, and every number between it and the answer comes from code written here. Each section builds the piece the previous section's result showed was missing, and ends on a measurement.
+The framework is 3,350 lines of Python, counting code and docstrings but not blank lines or comments: 1,364 for the engine, 658 for the three backends and their Metal and Triton kernels, 734 for the models, and 594 for the server. The whole repository, with its tests, benchmarks, and this page, is 10,945 (scripts/lines.py).
+You do not need to know any machine learning to follow along. Each section explains its idea from scratch before stackgrad implements it. The figures read the project's result files, and several show what the engine on the server returns when you click.
+
+
+## 2Autograd: how a network learns
+A neural network is a function with adjustable numbers inside it. It takes numbers in, pixels or token ids, and returns numbers out. We call the adjustable numbers parameters or weights, and a large language model has billions of them. A new network starts with random weights and gives useless answers. Learning means nudging the weights until the answers get good.
+To nudge them in the right direction we need two things. First, a loss: one number that says how wrong the network is on an example, where lower is better. Second, the gradient of the loss with respect to every weight: how much the loss would change if that one weight moved a little. The gradient points uphill, so we step each weight a little the other way. That step is gradient descent, and training repeats it millions of times.
+[ASIDE] A network with one weight, trained for one step
+Take the smallest possible network,  y=w⋅x, with one weight  w. We want it to output  6 when the input is  2, so we use the squared error as the loss:  L=(wx−6)2. Start from  w=1: the output is  2 and the loss is  (2−6)2=16.
+The gradient is  ∂L/∂w=2(wx−6)x=2⋅(−4)⋅2=−16. It is negative, which says that increasing  w lowers the loss. Step against it with a step size (the learning rate) of  0.1:  w←1−0.1⋅(−16)=2.6. Now the output is  5.2 and the loss is  (5.2−6)2=0.64, twenty-five times smaller after one step. [/ASIDE]
+
+With one weight you can work the gradient out by hand. With a billion weights in dozens of layers you need a program that computes them all, and that program is the first part of stackgrad.
+
+### The chain rule as a program
+Any computation, however large, is a chain of small steps: multiply, add, take an exponential, and so on. Calculus has a rule for chains. If  z depends on  y and  y depends on  x, then  ∂z/∂x=(∂z/∂y)(∂y/∂x): the effect of  x on  z is its effect on  y times the effect of  y on  z. Automatic differentiation, or autograd, applies that rule to every step of a program.
+It works in two passes. The forward pass runs the computation and, as it goes, records every step and which values fed into it, building a graph. The backward pass walks that graph from the loss back to the inputs. It starts with a gradient of 1 at the loss (the loss changes one-for-one with itself) and, at each step, multiplies the gradient arriving from above by that step's local derivative and passes the result down to the step's inputs. A value that feeds into several steps receives the sum of the gradients coming back from each of them. The scheme is reverse-mode differentiation, also known as backpropagation [3], and one backward pass costs about two forward passes for any number of weights.Expressionrelu(x * w + b) ** 2x * x + xlog(exp(a) + exp(b))sigmoid(sum(w * v))
+x = 2, w = -0.5, b = 3Run backwardvaluegradientpow4∂ 1where2∂ 4const1const0add2∂ 4b3∂ 4mul-1∂ 4w-0.5∂ 8x2∂ -2React FlowPress enter or space to select a node. You can then use the arrow keys to move the node around. Press delete to remove it and escape to cancel.Press enter or space to select an edge. You can then press delete to remove it or escape to cancel.
+[CAPTION] Figure 2: The autograd engine, recorded from stackgrad's server. The forward pass fills in each value (blue) and the backward pass each gradient (pink), from the output back to the inputs. At  x=2,w=−0.5,b=3 the chain rule gives  ∂/∂x=−2 and  ∂/∂w=8, the numbers on the graph. Pick another expression, or run backward again.
+
+### Nineteen operations with gradients
+A tensor in stackgrad, an array of numbers with any number of dimensions, stores a reference to the operation that produced it. An operation is a small class with two methods. forward computes the result from the raw arrays. backward receives the gradient of the result and returns one gradient per input. For multiplication,  z=xy, backward returns  zˉ⋅y for  x and  zˉ⋅x for  y, where  zˉ is the gradient arriving at  z. In general, backward multiplies the incoming gradient by the operation's Jacobian, the table of all its partial derivatives, without building that table: xˉi​=j∑​∂xi​∂yj​​yˉ​j​,where vˉ means ∂v∂L​
+For multiplication the whole class is this (stackgrad/mlops.py, without its checks that skip gradients nothing needs):
+[CODE]
+class Mul(Function):
+    def forward(self, x, y):
+        self.x, self.y = x, y          # kept for backward
+        return x * y
+
+    def backward(self, grad):          # grad is dL/dz for z = x * y
+        return grad * self.y, grad * self.x
+[/CODE]
+
+Each operation knows only its own inputs. backward() on the loss connects them: it sorts the graph so every tensor comes after the tensors it was computed from, then walks it from the loss back, handing each operation the gradient that has reached its output. Condensed from stackgrad/tensor.py, without the checks that skip tensors needing no gradient (the real one walks the graph with a loop instead of recursion, so a deep graph cannot hit Python's recursion limit):
+[CODE]
+def backward(self):
+    topo, seen = [], set()
+    def build(t):                        # every tensor after the tensors it was computed from
+        if t not in seen:
+            seen.add(t)
+            if t._ctx:
+                for parent in t._ctx.parents:
+                    build(parent)
+            topo.append(t)
+    build(self)
+    self.grad = ones_like(self.data)     # dL/dL = 1
+    for t in reversed(topo):             # from the loss back to the inputs
+        if t._ctx:
+            for parent, g in zip(t._ctx.parents, t._ctx.backward(t.grad)):
+                parent.grad = g if parent.grad is None else parent.grad + g
+[/CODE]
+
+All of stackgrad's gradients live in one file, mlops.py, in nineteen such operations: add, multiply, reciprocal, exponential, logarithm, sigmoid, power, sum, max, reshape, transpose, broadcast, indexing, concatenation, matrix multiplication, and a few more. Subtraction is adding a negation, and division is multiplying by a reciprocal. Softmax, normalization layers, and the loss are short compositions of the nineteen, and none of them defines a gradient of its own.
+Broadcasting needs care. Add a single number to a whole array and NumPy copies the number across the array, and NumPy calls this broadcasting. Each copy receives a gradient in the backward pass, so the backward pass has to add the copies' gradients back into the one original number. stackgrad makes the copy an explicit operation, Expand, whose backward is that sum.
+
+### Checking every gradient two ways
+A wrong gradient does not crash anything. The model trains worse instead, and nothing points you to the cause. stackgrad checks its gradients against two independent references. The first is the definition of a derivative: nudge an input up by a tiny amount  h, then down, and measure the slope. ∂x∂f​≈2hf(x+h)−f(x−h)​,h=10−5
+The check is slow, since it reruns the function twice per input, but it needs no calculus and no trust. stackgrad compares it with backward's result for 52 operations and layers, and Figure 3 shows a run of all of them on the server.Run gradient checks
+[CAPTION] Figure 3: Finite-difference gradient checks, recorded from stackgrad's server and replayed at the pace they ran. Each line is one operation or layer; it passes when the gradient from backward() agrees with the measured slope for every input.
+The second reference is PyTorch. I built the same 8.3M-parameter language model in both frameworks, copied the same starting weights into both, fed them the same batches of text, and trained each for 200 steps with the same optimizer. If any gradient anywhere were wrong, the two loss curves would separate (Figure 4).float64float32
+[CAPTION] Figure 4: Training loss of the same model in stackgrad (thin blue line) and PyTorch (wide pink line), in float64. They overlap. At step 1 they differ by 1.8e−15; the largest difference over 200 steps is 8.4e−4.
+The curves still differ by small amounts, because computers store numbers with limited precision. A 64-bit float keeps about 16 significant digits, so each arithmetic step rounds away a little, and two programs that add the same numbers in a different order get different last digits. In 64-bit floats the two frameworks agree at step 1 to 1.8e−15, which is rounding error alone, so the math is identical. Each training step feeds the previous step's tiny differences forward, and the gap grows to 8.4e−4 by the end. In 32-bit floats, which keep about 7 digits and which models use in practice, each rounding step is about half a billion times larger, and the gap reaches 1.3e−2. Switch the figure between the two to compare.
+On the laptop's CPU, stackgrad takes 191 ms per training step of this model and PyTorch takes 90.1 ms, so PyTorch runs 2.1 times faster.
+
+### When does an operation run?
+Every operation so far ran the moment it was written. stackgrad now waits: c = a @ b records the multiplication and its inputs and returns a tensor that knows its shape and dtype but holds no numbers. The numbers are computed when something reads them, through .numpy(), .item(), printing, .backward(), or .realize(). tinygrad works the same way [2], and so does MLX, the library behind the Apple GPU backend of §6.
+[CODE]
+c = a @ b      # recorded: c.shape is known, nothing has run
+y = layer(x)   # recorded and returned: still nothing has run
+y.numpy()      # realize: every operation y depends on runs, inputs first, once each
+[/CODE]
+
+Realizing walks the recorded graph from the inputs to the tensor that was read and runs each operation once; an operation nobody reads never runs. For the next operation to be recorded before the last one has run, each of the 20 primitives in mlops.py (the nineteen with gradients and the comparison x < y) states its output's shape and dtype from its inputs', and realize checks every stated shape against the computed one. An input that already holds numbers is captured as it was, so an optimizer step that replaces a weight cannot change a result recorded before it.
+Waiting saves nothing by itself. A training step of a 2-layer story model with 128-wide vectors records 178 operations and runs all 178, since every result feeds the loss. On the CPU its losses match eager execution bit for bit, and a step takes 10 ms lazily against 10 ms eagerly. On the Apple GPU two eager runs already differ by up to 4.8e−7, because the GPU sums in a different order from run to run, and lazy and eager runs differ by 4.8e−7; a step takes 4.8 ms against 4.09 ms. Laziness gives a compiler the whole graph before any of it runs, so the compiler can fuse operations into fewer kernels; stackgrad records the graph and stops there (bench/lazy.py, tests/lazy.py).
+
+
+## 3Turning text into numbers
+A network computes on numbers, so before a language model can read anything, text has to become a sequence of integers. A tokenizer does this. It cuts text into tokens from a fixed list, the vocabulary, and replaces each token with its position in that list.
+Single characters make a tiny vocabulary, but sentences become long sequences, and the model must learn to spell before it can learn anything else. Whole words make sequences short, but the vocabulary explodes, and the model has no way to represent a word missing from it, such as a name or a typo. Modern models use subwords. Common words get one token each, and rare words get a few.
+stackgrad's tokenizer uses byte-level byte-pair encoding [4] [5], the scheme behind GPT-2, GPT-4, and Qwen. It starts from bytes. Text in any language, emoji included, is a sequence of UTF-8 bytes, and only 256 different bytes exist, so no input is unknown. Then it learns merges. It finds the pair of adjacent symbols that occurs most often in the training text, adds that pair to the vocabulary as a new symbol, and repeats until the vocabulary reaches the size you asked for.
+[ASIDE] Four merges on a tiny corpus
+Suppose the training text contains low 5 times, lower 2 times, newest 6 times, and widest 3 times. Count every adjacent pair of letters, weighting each word by how often it appears. The pairs e s and s t both occur 9 times (6 in newest, 3 in widest), more than any other, so the first merge creates the symbol es. Recount, and es t now leads with 9, so the second merge creates est. Then l o and lo w lead with 7 each. After four merges, low is a single token and newest is n e w est. [/ASIDE]
+
+Encoding new text replays the merges in training order. stackgrad adds two refinements. First, a regular expression cuts the text into words, numbers, and punctuation before any merging, so a merge never spans two words, and dog in "dog." and "dog!" becomes the same token. Second, for speed, stackgrad counts word frequencies in parallel across the processor's cores, and after each merge it recounts pairs in the words that contained the merged pair instead of rescanning the whole corpus.
+[CAPTION] Table 1: Training a 10,000-token vocabulary on the TinyStories training set, then encoding the whole set with it.
+ | Vocabulary size | 10,000 tokens
+ | Training time | 44.7 s
+ | Peak memory of the largest worker process | 547 MB
+ | Tokens in the training set | 541,229,347
+ | Encoding speed | 90.1 MB/s
+ | Average bytes per token | 4.116
+ | Decoding the held-out set back to text | byte-for-byte exact
+An average token covers 4.12 bytes of text, so the model reads about a quarter as many tokens as there are characters. Figure 5 shows the merges on real text.TextOnce upon a time, a curious little robot found a shiny gear.The dragon Zorblax ate 1234 cookies and said, "Yum!"Lily and Ben were best friends. They played in the garden every day.
+14 tokens from 60 bytes with the tinystories-10k vocabulary.Once430␣upon439␣a259␣time398,44␣a259␣curious1223␣little390␣robot2052␣found505␣a259␣shiny877␣gear3835.46
+
+### Merges for one pre-tokenOnce␣upon␣a␣time,␣a␣curious␣little␣robot␣found␣a␣shiny␣gear.
+␣time
+␣time
+␣time
+␣time
+␣time
+4 merges, from bytes to final tokens.
+[CAPTION] Figure 5: The tokenizer, recorded from stackgrad's server. Pick a text. Each box is one token with its id. Then pick a word below to watch its bytes merge, step by step, into the final tokens.
+Two references check the tokenizer. Loaded with GPT-2's published merges, it produces the same token ids as tiktoken, OpenAI's tokenizer library. Loaded with Qwen3's vocabulary, Qwen's regular expression, which keeps each digit a separate token so numbers stay easy to do arithmetic on, and Unicode normalization, it produces the same ids as Hugging Face's tokenizer on each test text, including stories, Chinese, emoji, code, and chat transcripts.
+Chat models also use special tokens, reserved ids that ordinary text never produces. <|endoftext|> marks where one document ends and the next begins, and <|im_start|> and <|im_end|> mark who is speaking in a conversation. I wrote the chat template that wraps messages in these markers by hand, and it matches Hugging Face's character for character.
+
+
+## 4A language model
+Given a sequence of tokens, a language model assigns a probability to each token in the vocabulary being the next one. To write text, you sample a token from those probabilities, append it, and ask again. A chat model writes stories and does arithmetic by repeating that step.
+stackgrad's model is a decoder-only transformer [6], the architecture behind GPT, Llama, and Qwen, in the modern form taught in Stanford's CS336 [8]. Follow one token through it.
+Embedding. The token id selects a row from a learned table, a vector of  d numbers (512 for the story model). Think of the vector as the model's working notes about that position. The notes flow upward through a stack of identical layers, and each layer reads them and adds its own update. That running sum is the residual stream.
+Attention is how a position gathers information from earlier positions. Each position computes three vectors from its notes: a query ("what am I looking for?"), a key ("what do I contain?"), and a value ("what do I pass on if chosen?"). The score between two positions is the dot product of one's query with the other's key. Softmax turns the scores into weights that are positive and sum to 1, and the output is the weighted sum of the values: softmax(s)i​=∑j​esj​esi​​,Attention(Q,K,V)=softmax(d ​QK⊤​+M)V
+The mask  M holds  −∞ wherever a position would look at a later one, so a position never sees the future it is trying to predict. Dividing by  d ​ keeps the scores from growing with the vector length. A layer runs several of these attention computations side by side, the heads, each with its own weights and so its own pattern. In grouped-query attention [12], several query heads share one set of keys and values, which shrinks the memory they take during generation (§9).
+Figure 6 runs the trained story model (§5) on a sentence and draws each head's weights. Most heads spread their weight over several earlier tokens, and their patterns shift from sentence to sentence. A few have a habit you can spot. The figure opens on layer 3, head 11, where words inside a phrase look back to the verb or preposition that introduces it: little, girl, and the first Lily look at was, and red and ball look at with. Layer 1, head 15 parks much of its weight on the first token, a resting place for a head when nothing earlier matters. Change the sentence to see the patterns move.Text
+[CAPTION] Figure 6: Attention patterns of the trained story model, recorded from stackgrad's server. Rows are its layers and columns its heads; click a thumbnail to enlarge it. In the enlarged view each row is a token looking back at the tokens before it, and bluer cells carry more weight (on a square-root scale, so faint patterns stay visible).
+Position. Attention by itself ignores word order. Shuffle the earlier tokens and the weighted sum stays the same. Rotary position embeddings (RoPE) [10] fix this by rotating each query and key by an angle proportional to its position  p, a different speed for each pair of dimensions. Because rotating both vectors changes their dot product only by the difference of their angles, scores end up depending on how far apart two tokens are: (xi​xi+d/2​​)↦(cospθi​sinpθi​​−sinpθi​cospθi​​)(xi​xi+d/2​​),θi​=b−2i/d
+Feed-forward. After attention, each position runs its notes through a small two-layer network on its own. The modern version is SwiGLU [11]: two projections of the input, one passed through a smooth on-off function (SiLU) that acts as a gate on the other, then a projection back down. Normalization before each of these blocks rescales the notes to a steady size, so values neither vanish nor explode across dozens of layers. The RMSNorm [9] version divides by the root mean square and multiplies by learned gains  g: RMSNorm(x)=d1​∑i​xi2​+ϵ ​x​⊙g,FFN(x)=W2​(SiLU(W1​x)⊙W3​x)
+In code, a whole layer is two lines (stackgrad/gpt.py):
+[CODE]
+def forward(self, x, cache=None, pad=None):
+    x = x + self.attn(self.attn_norm(x), cache, pad)   # attention, added to the residual stream
+    return x + self.ffn(self.ffn_norm(x))              # feed-forward, added the same way
+[/CODE]
+
+Output. After the last layer, one more normalization, then a multiplication by a matrix with one row per vocabulary entry, gives a score per token, the logit. Softmax turns the logits into the probabilities we started with. Table 2 lists the two configurations this post uses: the small story model, and Qwen3-0.6B (§8), which is the same design with four settings changed, so one class in stackgrad covers both.
+[CAPTION] Table 2: The two models in this post. The parameter count is the number of adjustable numbers. |
+ | Setting | Story model (CS336) | Qwen3-0.6B
+ | Vocabulary | 10,000 | 151,936
+ | Vector width  d | 512 | 1,024
+ | Layers | 4 | 28
+ | Query heads / key-value heads | 16 / 16 | 16 / 8
+ | Width of one head | 32 | 128
+ | Feed-forward width | 1,344 | 3,072
+ | RoPE base  b | 10,000 | 1,000,000
+ | Normalization on queries and keys | no | yes
+ | Output matrix shared with the embedding | no | yes
+ | Parameters | 22,696,448 | 596,049,920
+
+
+## 5Can it train a language model?
+Training needs a loss, and for next-token prediction the loss is cross-entropy: the negative logarithm of the probability the model gave to the token that came next. Give the right token probability 1 and the loss is 0. Give it 0.25 and the loss is  −ln0.25≈1.39. A model that guesses at random among 10,000 tokens scores  ln10,000≈9.21, and the untrained model's first step scores 9.23, since random weights make near-uniform guesses. The exponential of the loss, the perplexity, is easier to read. A perplexity of 4 means the model is as unsure as a uniform choice among 4 tokens.
+The data is TinyStories [7]: millions of short children's stories written by GPT-4 in the vocabulary of a small child. It is small enough to train on one GPU in an hour and simple enough that a small model learns to write coherent stories, which makes progress easy to see. Training repeats one step 40,000 times: take 32 random windows of 256 tokens from the text, compute the loss at every position, run backward, and update every weight.
+In code, condensed from train_gpt.py:
+[CODE]
+for step in range(1, steps + 1):
+    opt.lr = cosine_lr(step, max_lr, min_lr, warmup, steps)   # warmup, then cosine decay
+    x, y = get_batch(train, batch, context)                   # y is x shifted by one token
+    loss = cross_entropy_loss(model(x), y)
+    opt.zero_grad()
+    loss.backward()
+    clip_grad_norm(params, 1.0)
+    opt.step()                                                # AdamW
+[/CODE]
+
+[ASIDE] The parts of a training step
+AdamW [13] [14] is the update rule. Plain gradient descent uses one step size for every weight. Adam keeps a running average of each weight's gradient and of its square, and divides one by the square root of the other, so weights whose gradients stay small still move, and weights with noisy gradients move less. The "W" adds weight decay, which shrinks each weight a little toward zero at each step so weights grow only when the data asks for it.
+The learning rate schedule starts small and ramps up over 1,000 steps (warmup), because gradients from random weights are unreliable. It then decays along a cosine curve to 0.0001, so the final steps make fine adjustments instead of large jumps.
+Gradient clipping rescales the whole gradient whenever its length exceeds 1, so one unusual batch cannot throw the weights far off course.
+Validation scores the model every 500 steps on stories it never trains on. If training loss keeps falling while validation loss rises, the model is memorizing its training stories. [/ASIDE]
+
+The full run used Stanford CS336's configuration: the 22.7M-parameter model of Table 2, 327.7M tokens in all, learning rate 0.001, weight decay 0.1, on one NVIDIA GeForce RTX 3090 through stackgrad's CuPy backend (§6). Figure 7 shows its loss curves.
+[CAPTION] Figure 7: The TinyStories run, from runs/tinystories: train loss in blue, validation loss in pink, on a log scale. The TinyStories run ends at a validation loss of 1.399, a perplexity of 4.05.
+Validation loss falls from 2.807 after the first 500 steps to 1.399 at the end, under CS336's target of 1.45, in 71 minutes at a median 80,643 tokens per second. The validation curve tracks the training curve the whole way, so the model predicts stories it never saw about as well as the ones it trained on.A sample from the final checkpoint, cut off at its length limit:
+Once upon a time, there was a big dog named Max. Max liked to chew on his toys all day long. He lived in a small house with his friend, a little girl named Lily.
+One day, Max and Lily were playing in the yard. Max found a shiny thing on the ground. He picked it up with his mouth and showed it to Lily. "Look, Lily! I found a shiny thing!" Max wagged his tail and barked.
+Lily looked at the shiny thing and said, "
+Temperature and top-p control how the next token is drawn. Temperature divides the logits before the softmax: below 1 it sharpens the distribution toward the likeliest token, above 1 it flattens it, and 0 means always take the likeliest. Top-p keeps the smallest set of likeliest tokens whose probabilities add up to p, which cuts off the long tail of unlikely tokens. Figure 8 samples stories at different temperatures.PromptOnce upon a time, there was a littleTom and his dog went to the park. They sawThe little bird was sad becauseTemperature0.000.801.50
+Top-p 0.95, at most 120 new tokensGenerate
+[CAPTION] Figure 8: Generation from a trained checkpoint, recorded: the server ran stackgrad's model with a key-value cache (§9) on the CPU, and each story appears over the time it took. Generated text follows the prompt in plain type.
+
+### Which parts matter
+§4 built the model from parts that recent transformers share: RMSNorm before each sublayer, RoPE for position, and SwiGLU in the feed-forward layer. CS336's ablations take each one out and train again. Every variant below trains the story model for 10,000 steps, a quarter of the full run, with everything else unchanged (ablations.json).
+The model as built ends at a validation loss of 1.524. Moving RMSNorm after each sublayer, where the original transformer put it, costs 0.013. Replacing SwiGLU with a plain SiLU layer, widened to the same number of parameters, costs 0.03. Dropping position information entirely costs 0.085, the most of the three, yet the model still learns. Haviv et al. [37] found the same and traced it to the causal mask: each position sees a different number of earlier tokens, which tells it roughly where it is.
+Without RMSNorm, nothing rescales the vectors between sublayers, and at the full learning rate of 0.001 the run diverged: its loss stopped being a number at step 627, 127 steps after warmup reached the peak rate. At 0.0003 it trains to a validation loss of 1.699, 0.18 behind the model with RMSNorm at its own rate.
+One more switch changes the residual itself. TransformerLM(..., attn_res=True) replaces the plain sum of sublayer outputs with Block Attention Residuals: before every sublayer, a learned query takes a softmax over the outputs of earlier layers and mixes them, starting from an equal mix. The story model has not been trained with it here; the Attention Residuals post explains it and measures it on a small model.
+
+
+## 6Is a GPU faster?
+Most of a model's arithmetic repeats one operation over huge arrays, such as multiplying two matrices. A CPU has a handful of fast cores built to run complicated programs one step after another. A GPU has thousands of simple cores that all run the same small program, a kernel, on different pieces of an array at once. That design suits a transformer, which spends its time in large matrix multiplications.
+stackgrad runs on three array libraries that share NumPy's interface: NumPy on the CPU as the readable reference, MLX [43] on the Apple laptop's GPU, and CuPy [44] on an NVIDIA GPU. The gradient code in mlops.py never calls any of them by name. Each operation receives a module called xp that exposes the same dozen functions over its own kind of array, so one copy of every gradient runs everywhere, and one call, model.to("metal"), moves a model.
+tests/backends.py checks each GPU backend against NumPy. Of 52 gradient checks, 52 agree on the Apple GPU and 51 on the NVIDIA GPU, and the story model, trained on each from the same weights and batches, stays within 4.8e−7 of NumPy's loss (backends_metal.json, backends_cuda.json).
+
+### A GPU does not win by default
+Starting a kernel has a fixed cost. The CPU describes the work and hands it to the GPU's driver, and the GPU schedules it. For a small array, that fixed cost is the whole cost. Through stackgrad, one elementwise multiplication on a thousand numbers takes 3.1 µs with NumPy, 7.6 µs on the Apple GPU, and 42 µs on the NVIDIA GPU, so the CPU wins. On ten million numbers it takes 863 µs, 778 µs, and 99.7 µs, and the NVIDIA GPU wins by 8.7x. Figure 9 shows the crossover.rawsync every opstackgrad
+The same chain through stackgrad Tensors, so it adds the framework's Python cost per op.
+[CAPTION] Figure 9: The cost of one elementwise multiplication against the size of the array, both on log scales. The buttons switch between the raw array library, the library with a wait for the GPU to finish after every operation, and stackgrad on top of the library. The waiting view exposes each device's round trip: 139 µs on the Apple GPU and 35 µs on the NVIDIA GPU.
+Matrix multiplication suits a GPU. Multiplying two  n×n matrices takes  2n3 floating-point operations (FLOPs) on  3n2 numbers, so as  n grows, the arithmetic outgrows the memory traffic and the hardware can run at full speed. Figure 10 shows each device's throughput in trillions of operations per second (TFLOP/s). The NVIDIA GPU peaks at 33.9 TFLOP/s using TF32, a reduced-precision format that its tensor cores run in hardware, and the Apple GPU at 3.62 TFLOP/s.
+[CAPTION] Figure 10: Square matrix multiplication throughput against matrix size, log scale. Dashed lines use a reduced-precision number format: bfloat16 on the Apple GPU, TF32 on the NVIDIA GPU.
+Training can spend that speed through mixed precision [35], which multiplies in 16 bits while the weights stay in float32. On the NVIDIA GPU it takes a step of the story model from 69.6 ms to 61.8 ms and moves the loss by 0.0073 (mixed_precision_cuda.json).
+A whole training step of the story model spends most of its time in large matrix multiplications, so the GPUs win there (Figure 11). The NVIDIA GPU trains 25.1x faster than the laptop's CPU. On the Apple GPU, stackgrad reaches 82% of the speed of the same model written in plain MLX with MLX's own hand-tuned kernels, which measures what stackgrad's generality costs there.
+stackgrad on NVIDIA GPU (CuPy), tf3290,145 tok/s, 90.9 ms
+plain MLX on Apple GPU (MLX)14,765 tok/s, 554.8 ms
+stackgrad on Apple GPU (MLX)12,118 tok/s, 676 ms
+stackgrad on CPU (NumPy)3,588 tok/s, 2283 ms
+[CAPTION] Figure 11: One training step of the story model, with a batch of 32 sequences of 256 tokens: forward, backward, clipping, and the optimizer update. Longer bars are faster.
+The model FLOPs utilization (MFU) measures how much of the chip a training run uses. It divides the arithmetic a training step must do, about six operations per parameter per token, by what the chip could do at its rated peak. The full training run in §5 sustained a median 8.5 TFLOP/s, an MFU of 23.9%. Launch overhead and operations that move memory without doing much arithmetic take the remaining time, and attention has many of those, so §7 fuses it into one kernel.
+
+
+## 7Can a hand-written kernel beat the library's?
+Recall attention from §4: compute scores  S=QK⊤/d ​ between every pair of positions, apply the mask, take the softmax, and use the result to average the values. Composed from stackgrad's basic operations, each of those steps is its own kernel. The score matrix has one entry per pair of positions, so for 256 tokens and 16 heads it holds a million numbers per sequence, and every step writes all of them to the GPU's memory and the next step reads them back.
+Moving that matrix costs more than computing it. A GPU can do arithmetic far faster than it can move data to and from its memory, so a step that does one multiplication per number it reads spends most of its time waiting for memory. FlashAttention [16] [17] computes attention in one kernel that never writes the score matrix anywhere. It rests on a trick for computing a softmax in a single pass [15].
+[ASIDE] Softmax in one pass
+A softmax needs the largest score  m (subtracted for numerical safety) and the sum  l=∑j​esj​−m. Both seem to need all scores before you start. But you can keep a running maximum and a running sum, and whenever a larger score arrives, rescale the sum so far by  emold​−mnew​. Take the scores 1, 3, 2. After the first,  m=1 and  l=1. The 3 raises the maximum, so the old sum shrinks to  e1−3=0.135 and the new term adds  e0=1:  l=1.135. The 2 leaves the maximum alone and adds  e−1=0.368:  l=1.503, the same as computing it all at once. The weighted sum of values is rescaled the same way, so one pass over the keys gives the finished output. [/ASIDE]
+ mj​lj​oj​​=max(mj−1​,sj​)=lj−1​emj−1​−mj​+esj​−mj​=oj−1​emj−1​−mj​+esj​−mj​vj​​output=lS​oS​​
+I wrote three versions as Metal kernels for the Apple GPU (with MLX's mx.fast.metal_kernel), each fixing the previous one's bottleneck:
+v1 gives each query position one GPU thread, which reads every key and value straight from memory. It is simple, but neighbouring threads read the same keys again and again.
+v2 groups 32 query positions into a threadgroup that loads a tile of keys and values into fast on-chip memory once and shares it. Each key is read from main memory 32 times less often.
+v3 keeps v2's tiles and computes the dot products with the GPU's simdgroup matrix instructions, which multiply small 8 by 8 matrices in hardware instead of one number at a time.
+All three handle grouped-query heads and the offsets a cache needs during generation, and 15 of 15 runs across versions and shapes match a 64-bit reference to within 1e−4. Table 3 times them against MLX's scaled_dot_product_attention, which runs a fused kernel when each head is 64 or 128 numbers wide and, at 32, falls back to separate matrix products and a softmax.
+[CAPTION] Table 3: Time in milliseconds to compute attention on the Apple GPU (bold is the fastest in each row). "Materialized scores" is the version built from basic operations. v3 runs 6.7x faster than MLX at the training shape, where each head is 32 numbers wide and MLX's time matches the materialized version's, and 2.6x slower than MLX's fused kernel at Qwen3's shape, 128 wide. For generating one token at a time (decode), v1 takes 1.12x MLX's time. |
+ | Shape | Format | materialized scores | v1 thread per row | v2 threadgroup tiles | v3 simdgroup matmul | mx.fast.sdpa (oracle)
+ | CS336 training | float32 | 9.94 | 3.02 | 2.91 | 1.49 | 9.94
+ | CS336 training | bfloat16 | 11.2 | 2.03 | 3.49 | 1.65 | 5.4
+ | prefill 1k | float32 | 20 | 32.3 | 40.5 | 6.22 | 3.31
+ | prefill 1k | bfloat16 | 22.2 | 28.2 | 43.2 | 7.55 | 2.74
+ | Qwen3 prefill 2k | float32 | 26.3 | 329 | 124 | 18.8 | 7.19
+ | Qwen3 prefill 2k | bfloat16 | 26.8 | 303 | 127 | 19.8 | 5.6
+ | decode, 2k cache | float32 | 7.63 | 1.55 | 36 | 5.34 | 1.39
+ | decode, 2k cache | bfloat16 | 6.91 | 1.02 | 33.9 | 6.01 | 0.712
+Training also needs attention's backward pass. The kernel returns one extra number per row, the log of the softmax sum, which is enough to rebuild the softmax weights during backward instead of storing them: PdS​=eS−lse=P⊙(dP−rowsum(dO⊙O))​dVdQ​=P⊤dO=dSK/d ​​dPdK​=dOV⊤=dS⊤Q/d ​​
+Here  dO is the gradient arriving at the output and  ⊙ multiplies entry by entry. This backward lives in mlops.py with every other gradient, so it runs on all three backends.
+
+### Where a training step's time goes
+A kernel is worth writing only for an operation that costs something, and a profiler says which ones do. Inside with profile(): (stackgrad/profile.py), every primitive waits for the GPU to finish before the next one starts, so each one's time is its own. One forward and backward pass of the story model on 32 sequences of 256 tokens takes 777 ms this way on the Apple GPU. A normal step, optimizer included, takes 680 ms, because there the GPU queues work without waiting.profile_metal.json lists every primitive.
+Matrix multiplications take the most time: 222 ms backward and 94.2 ms forward. Attention comes second, and nearly all of its time is backward: 121 ms, against 8.3 ms for the fused forward, 14.5x. Counting arithmetic predicts 4.4x. The forward makes two matrix products per head, the scores and the weighted sum of values, and skips the 44% of 32-by-32 tiles that the causal mask hides completely. The backward in mlops.py makes five products over every pair of positions: the scores again, then  dV,  dP,  dQ and  dK. It also writes three score-sized matrices,  P,  dP and  dS, to the GPU's memory and reads them back, the traffic the forward kernel exists to avoid. FlashAttention-2 [17] fuses the backward as well.
+
+### The backward as a kernel, in Triton
+On the NVIDIA GPU I wrote FlashAttention-2's forward and backward in Triton [34], a Python dialect for GPU kernels in which a program describes the work on one tile and the compiler handles the threads. The forward is the one-pass softmax above. The backward walks the tiles twice: once per block of keys, adding up  dK and  dV, and once per block of queries for  dQ. Each pass rebuilds its tile of  P from the saved log-sum-exp in on-chip memory, so no score-sized matrix reaches the GPU's main memory. Against a 64-bit reference, 5 of 5 checks of the kernels agree to within 1e−4.
+At the training shape, forward and backward together take 0.764 ms, against 6.48 ms for the composed version, 8.5x faster (flash_attention_cuda.json lists every shape). In a profiled training step on the NVIDIA GPU, attention's backward takes 3.8% of the time, where on the Apple GPU, with the composed backward, it took 15.6% (profile_cuda.json).
+
+
+## 8Can it run someone else's model?
+Everything so far used a model I trained myself. A stronger test is someone else's model: its published weights should give the same numbers in stackgrad as in the reference library. Qwen3-0.6B [20] is an open chat model from Alibaba's Qwen team, small enough to run on a laptop and capable enough to hold a conversation and work through grade-school math.
+Its weights ship as a safetensors file. Eight bytes give the length of a header, the header lists each tensor's name, number type, shape, and byte range as JSON text, and the raw bytes follow. Reading a tensor means slicing out its bytes and reinterpreting them, so loading the file runs no code from it, which is the reason the format exists.
+[ASIDE] bfloat16, and why converting it is exact
+Qwen ships its weights in bfloat16, a 16-bit number format. A standard 32-bit float spends 1 bit on the sign, 8 on the exponent (the scale), and 23 on the mantissa (the digits). bfloat16 keeps the same sign and exponent and the first 7 mantissa bits. It covers the same range of sizes with two to three significant digits instead of seven, in half the memory. Because bfloat16 is the first half of a 32-bit float, stackgrad converts it by appending 16 zero bits, and the conversion loses nothing. [/ASIDE]
+
+Qwen3 is the model of §4 with four settings changed (Table 2). Each head is 128 numbers wide, set apart from the model's width. Qwen3 normalizes queries and keys before RoPE, which keeps attention scores in a steady range. The normalization constant is smaller. And the output layer reuses the embedding table instead of a separate matrix, which saves 156M parameters. The loader maps each of Hugging Face's tensor names to a stackgrad parameter and refuses to run if any name or shape fails to match, because a weight that keeps its random starting value without warning produces a model that runs and talks nonsense.
+[CAPTION] Table 4: stackgrad's output scores (logits) for a 17-token prompt against Hugging Face's transformers library, the reference implementation; Qwen3's largest logit is 24.3. "Same next token" is how often both pick the same likeliest next token. With greedy decoding, stackgrad reproduces Hugging Face's first 24 tokens of Qwen3's text. |
+ | Model | stackgrad on | Largest gap | Gap relative to the largest logit | Same next token
+ | Qwen3-0.6B | CPU (NumPy), float32 | 5.1e−5 | 2.1e−6 | 100%
+ | Qwen3-0.6B | Apple GPU, float32 | 9.7e−5 | 4.0e−6 | 100%
+ | Qwen3-0.6B | Apple GPU, bfloat16 | 3.5e−1 | 1.4e−2 | 100%
+In 32-bit floats the two implementations agree to a few millionths of the logits' size, which again is rounding. In bfloat16, the format people run the model in, the gap grows to 1.4% of the largest logit, yet both still pick the same next token at every position.
+The same layers also run GPT-2 [5], an older design with learned positions, LayerNorm, and a bias on every projection, from one file in the style of tinygrad's examples (Appendix, Other models).
+
+
+## 9Can it serve two people at once?
+stackgrad now computes the same scores as the reference, one forward pass at a time. A chat reply needs one forward pass per new token, hundreds in all. Without care, step  t recomputes the keys and values of all  t earlier tokens, although they never change. The KV cache stores them instead: each step computes keys and values for the one new token, appends them, and attends over the stored ones. The work per token stops growing with the length of the text. The price is memory, since each token of each conversation keeps its keys and values for each layer.
+That memory limits how many people one GPU can serve. Reserving the maximum length for each request wastes the part a short reply never uses. vLLM's PagedAttention [18] stores the cache in small fixed-size blocks, handed out as a sequence grows and taken back the moment it finishes. stackgrad's block manager keeps the same books: it counts each sequence's blocks and decides which requests run. The memory itself stays one array per cache.
+The second idea is continuous batching [19]. A plain batch of requests runs until its longest reply finishes, while finished requests sit idle. stackgrad's scheduler instead admits new requests between any two generation steps, runs every admitted request through each step together, and lets each one leave as soon as it is done. If the cache runs out of blocks, the scheduler preempts the newest request. That request gives back its blocks, waits, and later rebuilds its cache from its prompt plus the tokens it had already produced.
+Running several conversations through one step needs their caches to line up, and each conversation's cache has its own length. The runner pads each cache on the left to the longest and masks the padding out of attention. Each new token keeps the position it holds in its own conversation, so RoPE sees the distances it would see alone. While the same requests keep running, the padded caches stay together and grow by one position per step. When a request joins or leaves, the runner splits them apart and pads the new set, copying every cache; an attention kernel that read each sequence's keys and values through its own list of blocks would skip the copy. The padding also takes memory the block manager never counts: a short conversation beside a long one holds as many positions as the long one.
+tests/serve.py checks the scheduler with greedy decoding, where each request must receive the same tokens it gets when it runs alone. Under each of 3 loads every request does, including a run with 3 preemptions when the whole cache holds only 9 blocks (serve_cpu.json).
+In Figure 12 the engine serves Qwen3. Messages go through an endpoint shaped like OpenAI's chat API into the scheduler and engine, and Qwen3 runs in stackgrad on the Apple GPU in bfloat16. Thinking mode is off, so it answers without a reasoning preamble.
+Pick a message and send it.MessageWhat is 17 times 23? Show the steps briefly.Write a haiku about a GPU.Send
+[CAPTION] Figure 12: Chat with Qwen3-0.6B, recorded from stackgrad's server and replayed at the speed it streamed. The line under the reply gives the time to the first token and the speed after it.
+A step for several conversations costs little more than a step for one. Each decode step pays for reading every weight from memory and for launching hundreds of small kernels (§6), and neither cost grows with the number of rows. With 8 chats arriving at once, each writing 128 tokens, one forward pass per conversation produces 21.4 tokens per second in all, about what one chat gets alone (22.6). One pass per step produces 128, 6x as many, while the step grows from 44.4 ms to 58.3 ms. In float32, all 8 batched replies match the one-at-a-time replies token for token. In bfloat16, 4 of 8 do, since a masked batch skips the fused attention kernel and rounds differently, and one flipped near-tie changes the rest of a reply (serve_batch_metal.json). Batching raises the total, and each reply still streams no faster than one decode step allows.
+
+
+## 10Can decoding go faster?
+Each reply in Figure 12 streams at the pace of the decode step. Generating one token runs the whole model once and reads each weight from memory once. For a 0.6B-parameter model in bfloat16 that is about 1.2 GB per token. The arithmetic is cheap by comparison, so memory bandwidth sets the speed of generation. No implementation can produce tokens faster than the bandwidth divided by the bytes of weights. There are two ways past that limit: read fewer bytes per token, or get more than one token from each read.
+Quantization reads fewer bytes. stackgrad cuts each row of a weight matrix into groups of 64, keeps a scale and an offset per group, and rounds every weight to one of  2bits levels; its own Metal kernel multiplies against the packed integers and matches MLX's on the same bytes (tests/quant.py). Four bits cut the weights read per token from 1,192 MB to 335 MB, for 19.3% higher perplexity on math text. Yet a decode step goes only from 24.7 ms to 20.9 ms. Reading the bfloat16 weights takes 11.9 ms of the step at the measured bandwidth; the rest is hundreds of small operations, each paying a kernel launch (§6), and quantizing leaves those as they were (quant.json).
+Speculative decoding [21] [22] gets more than one token from each pass instead. A small draft model guesses the next few tokens, the large model checks all of them in one pass, and it keeps the guesses it agrees with by a rule that leaves its output distributed exactly as before (tests/speculative.py). With Qwen3-0.6B drafting for Qwen3-1.7B, the target kept 80% of single guesses and every output matched the 1.7B's own text token for token, yet the best speedup was 1.07x, at 1 guess per pass (speculative_metal.json). The draft costs too much: a 0.6B decode step takes 61% of a 1.7B step, because both models have 28 layers, launch the same number of kernels, and pay §6's launch cost for each.
+
+
+## 11Does fine-tuning make it better at math?
+A pretrained model knows a great deal but has its own habits. Fine-tuning trains it a little further on examples of the behaviour you want. Full fine-tuning updates every weight, and Adam stores two extra numbers per weight, so even a 0.6B model needs memory for several copies of itself.
+LoRA [23] (low-rank adaptation) freezes the original weights and learns a small correction next to each weight matrix. A matrix  W with  nin​ inputs and  nout​ outputs gets a correction  AB, where  A has  r columns and  B has  r rows for a small rank  r: y=xW+rα​(xA)B,frozen   nin​⋅nout​​​≫trained   r(nin​+nout​)​​
+ B starts at zero, so training starts from the original model unchanged. For a 1024 by 1024 matrix at rank 16, the correction has 32,768 numbers against the matrix's 1,048,576. Across all seven matrices of all 28 layers, Qwen3-0.6B gets 10,092,544 trainable numbers, 1.69% of the model. After training,  AB is added into  W once, and the fine-tuned model runs at the original's speed.
+The task is GSM8K [24]: grade-school math word problems that take a few steps of arithmetic, each with a worked solution ending in #### answer. The model trains on the 7,473 training problems, learning to produce the solutions while the loss ignores the question. I fixed the evaluation protocol before training: the first 250 test problems, the same prompt asking for the answer after ####, greedy decoding with thinking mode off, and at most 320 new tokens. A problem counts as solved when its final number, the first #### or \boxed{} answer, equals the reference (bench/gsm8k.py says why the first).
+This run kept every activation for backward and fit 2 examples per pass. Activation checkpointing [36], which keeps only each block's input and recomputes the rest during backward, fits all 8 in 5.23 GB on the 3090 (checkpointing_cuda.json).
+[CAPTION] Table 5: GSM8K accuracy of Qwen3-0.6B running in stackgrad, on the Apple GPU in bfloat16. "Hit the limit" counts replies cut off at 320 tokens. |
+ | Model | Solved | Accuracy | Average reply | Hit the limit
+ | Qwen3-0.6B as released | 152 of 250 | 60.8% | 213 tokens | 45
+ | after LoRA on GSM8K | 123 of 250 | 49.2% | 92 tokens | 11
+LoRA made the model worse at math. Accuracy falls from 60.8% to 49.2%. The loss on the solution tokens still fell, from an average of 0.770 over the first 50 steps to 0.573 over the last 50 (Figure 13), so the model got better at reproducing GSM8K's solutions.
+Reproducing them was the wrong goal. GSM8K's solutions are terse, a few lines of arithmetic and then the answer, and the model picked up their length along with their format. Its average reply shrinks from 213 to 92 tokens, and the replies cut off at the limit drop from 45 to 11. The released model writes out more of its steps and gets more answers right. The loss rewards replies that read like the reference solution, while Table 5 counts whether the final number is right, and nothing in this training run rewarded that.
+Problem 56 shows the change. It has the shortest correct reply from the released model among the 52 problems LoRA broke (gsm8k_base_replies.jsonl, gsm8k_lora_gsm8k_replies.jsonl). Peter buys a $7 ticket and $7 popcorn each time, with $42 to spend. The released model, in 83 tokens:
+[CODE]
+Step 1: Peter pays $7 for a movie ticket and $7 for popcorn.
+So, each movie visit costs **$14**.
+
+Step 2: He has **$42** for the week.
+How many times can he go to the movies?
+
+$$
+\frac{42}{14} = 3
+$$
+
+**Final Answer:**
+#### 3
+[/CODE]
+
+After LoRA, in 28 tokens and GSM8K's terse style, the popcorn is gone:
+[CODE]
+Peter can buy 42/7 = 6 tickets.
+So he can go to the movies 6 times.
+#### 6
+[/CODE]
+
+[ASIDE] My first run trained in float64 by mistake
+Each adapter's  A started as random numbers divided by  nin​ ​. Since NumPy 2, dividing a float32 array by the float64 number NumPy's square root returns gives a float64 array. The first adapted layer's output became float64, and so did every layer after it, in the forward pass and the backward pass. The 3090 does float64 arithmetic at 1/64 of its float32 rate, and the run took 136 minutes. Cast after dividing, every activation takes 4 bytes instead of 8, the run fits two examples per pass instead of one, and takes 14.8 minutes. The float64 run's adapter solves 124 of 250, against 123 for the float32 one. tests/lora.py now checks that the adapter and the loss stay float32. [/ASIDE]
+
+[CAPTION] Figure 13: The LoRA run's training loss, from runs/lora_gsm8k, measured on the solution tokens only. The GSM8K evaluation in Table 5 plays the part of a validation curve.
+
+
+## 12Does learning from its own answers help?
+LoRA in §11 trained the model to copy solutions, and it got worse at what Table 5 counts. Reinforcement learning trains on that count. The model writes its own replies, a checker scores each one, and training makes the replies that scored well more likely. The checker here is the evaluation's rule: a reply earns 1 if its final number equals the reference and 0 otherwise. Nothing tells the model how to reason, only whether its answer came out right.
+The update comes from the policy gradient [25]. Write  πθ​(o∣q) for the probability that the model, with weights  θ, answers question  q with reply  o, and  R(o) for the reply's score. The gradient of the expected score is an expectation too, so sampled replies estimate it: ∇θ​Eo∼πθ​​[R(o)]=Eo∼πθ​​[R(o)∇θ​logπθ​(o∣q)]
+Stepping along  R(o)∇θ​logπθ​(o∣q) makes scoring replies likelier. Used raw, it pushes up every correct reply by the same amount, even on a question the model never gets wrong, and the estimate is noisy. GRPO [26] (group relative policy optimization) samples a group of replies to each question and scores each reply against its siblings: Ai​=stdj​R(oj​)+ϵR(oi​)−meanj​R(oj​)​,L=−N1​i=1∑N​Ai​B1​t∑​logπθ​(oi,t​∣q,oi,<t​)
+A reply better than its group's average gets a positive advantage  Ai​ and becomes likelier, and a worse one becomes less likely. A group whose replies all scored the same, all right or all wrong, says nothing about which reply was better: every advantage in it is zero, and stackgrad skips those replies in the update. A reply's log-probabilities are summed and divided by  B, the same 320-token budget for every reply, not by the reply's own length, which would give a long wrong reply a smaller push per token than a short one (Liu et al. [27]).
+In code the loss is a weighted sum of the replies' token log-probabilities, condensed from policy_loss in train_grpo.py:
+[CODE]
+logp = log_softmax(logits, axis=-1)[rows, targets]                  # each reply token's log-probability
+weight = np.repeat(advantages / budget / n_replies, reply_lengths)  # A_i / (B N), once per token
+loss = -(logp * weight).sum()
+[/CODE]
+
+[ASIDE] Four replies to one question
+Say one reply of four is right: scores 1, 0, 0, 0. The mean is 0.25 and the standard deviation 0.433, so the right reply's advantage is  (1−0.25)/0.433=1.73 and each wrong reply's is  (0−0.25)/0.433=−0.58. The right reply gets pushed up three times as hard as each wrong one gets pushed down, and the pushes cancel:  1.73=3×0.58. [/ASIDE]
+
+Training starts from the released Qwen3-0.6B, not the LoRA model of §11, with a fresh LoRA adapter of the same size. Its learning rate, 0.0001, is ten times CS336's rate for training every weight, the ratio "LoRA Without Regret" [28] recommends. Each step samples 8 replies to each of 8 training problems at temperature 1 and makes one update.
+Sampling takes most of each step, up to 320 decode steps of one token each, and a decode step for one reply leaves most of the GPU idle (§6). Sampling all 64 replies in one batch fills it. On the 3090 a decode step takes 79 ms for one reply and 86.4 ms for 64, so the batch writes 58 times as many tokens per second (rollout_cuda.json). Prompts of different lengths share the batch by padding on the left, with the padding masked out of attention (tests/grpo.py). The first version still crawled. It copied all 64 rows of logits, 151,936 numbers each, to the CPU to draw the tokens, which took 98.5 ms per step against the model's 84.3 ms; drawing them on the GPU takes 1.2 ms.
+
+### The reward the model gamed
+The first run used the reward above, the final number alone. From step 51 on, every reply it sampled ran to the 320-token limit (Figure 14). The model had found replies the reward could not tell from good ones: it wrote its solution, then "The final answer is  18​." between rows of dashes, over and over, until the limit cut it off. The number stayed right, and nothing in the reward cost the model anything for writing on. On the test problems that adapter solves 154 of 250, against 152 before training, and all 250 of its replies hit the limit (Table 6).
+The fix makes stopping part of the answer. A reply earns 1 only if it ends with Qwen's end-of-turn token and its final number is right, so a reply the limit cuts off scores 0 whatever it says.
+[CAPTION] Figure 14: The share of sampled replies the 320-token limit cut off, step by step, under each reward, from runs/grpo_gsm8k and runs/grpo_no_stop. The first run stopped at step 143.
+Under the new reward the share cut off fell from 27% over the first ten steps to 2% at its lowest ten-step stretch, and ended at 8%. It did not fall steadily. Twice it climbed back, and both climbs came with spikes in the gradient's norm, up to 271 at step 131 against a median of 0.28. Clipping caps every update at a norm of 1, so a spike cannot move the weights far, and these runs do not show which way the cause runs.
+[CAPTION] Figure 15: The share of sampled replies that scored, step by step, on the training problems, from runs/grpo_gsm8k. 200 of 200 steps; replies sampled at temperature 1.
+In 52% of groups the replies disagreed; the rest scored the same everywhere and trained nothing. A step took 39 s of sampling and 7.3 s of updating on average.
+[CAPTION] Table 6: GSM8K accuracy under the protocol of §11: the first 250 test problems, greedy decoding, at most 320 new tokens, on the Apple GPU in bfloat16. |
+ | Model | Solved | Accuracy | Average reply | Hit the limit
+ | Qwen3-0.6B as released | 152 of 250 | 60.8% | 213 tokens | 45
+ | after LoRA on GSM8K | 123 of 250 | 49.2% | 92 tokens | 11
+ | after GRPO, reward ignores stopping | 154 of 250 | 61.6% | 320 tokens | 250
+ | after GRPO, reward requires stopping | 139 of 250 | 55.6% | 216 tokens | 29
+On the training problems, sampled at temperature 1, the reward rose from 54% over the first 20 steps to 67% over the last 20. On the test problems, decoded greedily, the adapter solves 139 of 250, against 152 before training, and 29 of its replies hit the limit, against 45.
+On problem 56 from §11 the adapter writes 183 tokens, against the released model's 83, and drops the popcorn the way the LoRA model did (gsm8k_grpo_gsm8k_replies.jsonl, shortened):
+[CODE]
+Each movie ticket costs $7 and popcorn also costs $7.
+...
+Each movie costs $7$ dollars.
+...
+So, $ 7n \leq 42 $
+
+Therefore, $ n \leq \frac{42}{7} = 6 $
+...
+**Answer:** $\boxed{6}$
+[/CODE]
+
+Problem by problem, the adapter solved 25 problems the released model missed and missed 38 that it had solved. If training had changed nothing, each of those 63 disagreements would fall either way like a coin toss, and a split at least this uneven comes up 13% of the time, so these 250 problems cannot tell the adapter from the model it started as. LoRA's split in §11, 23 fixed against 52 broken, comes up 0.1% of the time: that drop is real.
+
+
+## 13Can it answer from documents and use a tool?
+Most systems built on language models do one of two things: answer from documents the model looks up, or let it call tools. Here both run on stackgrad end to end. They are programs that talk to the server of §9 through its chat endpoint, the way an application uses any hosted model, and stackgrad computes every number between the question and the answer, from the embedding to the last sampled token.
+
+### Retrieval
+A small model knows few facts. Retrieval-augmented generation [39] looks up passages that bear on a question and puts them in the prompt. The test is SQuAD v1.1 [40]: questions people wrote about Wikipedia paragraphs, with the answers they marked in the text. Its development set has 2,067 paragraphs.
+Finding the right paragraph needs a way to compare meanings. An embedding model maps a text to a vector so that texts about the same thing point the same way. Qwen3-Embedding-0.6B [41] has Qwen3's architecture with its own weights, so stackgrad runs it with the code of §8, and its embedding of a text is the final hidden state of the last token, scaled to length 1. The index is a NumPy matrix with one row per paragraph, built once in 363 s on the Apple GPU. Embedding a question takes 61 ms, and the search is one matrix product with the index and a sort: the largest dot products are the nearest paragraphs.
+[CODE]
+query = embed(model, tok, [INSTRUCT + question], device)[0]   # 1,024 numbers, length 1
+scores = index @ query                                          # one dot product per paragraph
+top = np.argsort(-scores)[:3]                                   # the three nearest
+[/CODE]
+
+For 200 questions drawn at random, the paragraph the question was written from ranks first 73.0% of the time and among the top 3 paragraphs 91.5% of the time. The server then answers each question with the top 3 paragraphs in its prompt.
+SQuAD scores an answer by exact match and by word overlap (F1), after lowercasing and dropping punctuation and articles. Qwen3 answers in sentences, such as "The chloroplast double membrane is sometimes compared to the mitochondrial double membrane.", which is right and scores 0 on exact match. Table 7 therefore also counts whether an answer contains a reference answer as whole words: 55% do. Asked without the paragraphs, the same questions set a floor, since SQuAD's questions presuppose their paragraph ("the event that compelled the protection of German private schools"): closed-book, only 3% of answers contain the reference. The paragraphs cost time, since the prompt grows by three of them: an answer takes 1.53 s against 0.48 s. Figure 16 runs the whole pipeline on a question of your own.
+[CAPTION] Table 7: Qwen3-0.6B on 200 SQuAD v1.1 questions through stackgrad's server on the Apple GPU, from apps/rag.py. Exact match and F1 follow SQuAD's rules; "contains" asks whether a reference answer appears in the reply as whole words. |
+ | Prompt | Exact match | F1 | Contains | Seconds per answer
+ | the question alone (a floor) | 0.0% | 0.085 | 3% | 0.48
+ | with the top 3 paragraphs | 20.5% | 0.4 | 55% | 1.53QuestionWhat language did Tesla study while in school?Where was the Charles Porter steam engine indicator shown?What is the chloroplast double membrane sometimes compared to?Search and answer
+[CAPTION] Figure 16: Retrieval, recorded through stackgrad's server: the question is embedded by Qwen3-Embedding-0.6B, compared with every one of SQuAD's 2,067 development paragraphs, and Qwen3-0.6B answers from the three nearest.
+
+### A calculator
+GSM8K's problems take a few steps of arithmetic, and a 0.6B model slips on arithmetic. Qwen3 was trained to call tools: shown a function's description in its system prompt, it can stop in the middle of a reply and write a call as JSON between <tool_call> tags. apps/agent.py gives it a calculator and runs the loop ReAct [42] describes: when a reply calls the tool, the program evaluates the expression and sends the value back as a tool message, and the model continues, until it answers without a call. The expression comes from the model, so the calculator parses it and evaluates numbers and arithmetic only, and never runs it as code (tests/agent.py). stackgrad writes tools and tool results into the prompt exactly as Hugging Face's chat template does, which tests/tokenizer.py checks token for token.
+The first run kept §11's prompt, which says "Solve it step by step", and offered the calculator in the system message. In 250 problems the model never called it, and Hugging Face's Qwen3-0.6B ignores it the same way on that prompt. The offer still changed the answers. Replies shrank from 213 tokens on average to 148, and the model solved 132 problems against 152: it fixed 21 and broke 41, a split that chance produces 1.5% of the time. Told to solve step by step, it does, whatever the system message says. The second run asks for the calculator in the user's turn instead.
+Asked in the user's turn, the model called the calculator 440 times, on 248 of 250 problems, and solved 42 against 152 without it: it fixed 7 problems and broke 117, a split that chance produces less than 0.01% of the time. A problem took 2 calls to the model on average, and a reply averaged 27 tokens, little more than the calls themselves. The model handed the calculator its arithmetic before working out what to compute, then answered with the number that came back (bench/results/gsm8k_agent_replies.jsonl has every trace). The request displaced the reasoning that had been getting problems right: with the plain prompt a reply averaged 213 tokens of worked steps.ProblemA robe takes 2 bolts of blue fiber and half that much white fiber. How many bolts in total does it take?Natalia sold clips to 48 of her friends in April, and then she sold half as many clips in May. How many clips did Natalia sell altogether in April and May?Solve with the calculator
+[CAPTION] Figure 17: The agent, recorded: apps/agent.py's loop on stackgrad's server, with each model reply and each calculator call in order. It reproduces the second run's prompt, so expect the calls to come before the reasoning.
+
+
+## Appendix
+
+
+### Scaling laws (CS336 assignment 3)
+Was the story model of §5 the right size for its compute? Training costs about six floating-point operations per parameter per token: a multiply and an add in the forward pass, and twice that in the backward. The full run spent  3.5×1016 of them. The same compute could buy a larger model trained on fewer tokens, or a smaller one on more. Hoffmann et al. [38] find the best split with IsoFLOP curves: fix a budget  C, train models of several sizes  N, counting only the weights in matrix products (the embedding table is a lookup and multiplies nothing, so the story model counts as 17.6M), each on  C/6N tokens, and see which ends lowest. I ran three budgets, from  3×1014 to  3×1015 operations, with five sizes each (Figure A1).
+[CAPTION] Figure A1: IsoFLOP curves from scripts/scaling.py: the final validation loss of TinyStories models of five sizes, each trained on exactly its budget's tokens. Darker lines spend more compute. A ring marks the bottom of the parabola fitted to each curve.
+Each curve has a bottom. A model too small cannot hold what the data teaches, and one too large sees too few tokens to fit its weights. A parabola through each curve, in the logarithm of the size, puts the best size at 3M, 5.5M, and 8.2M parameters, which grows as  C0.43. That exponent is loose. The smallest budget's losses only rise from its smallest model on, so its bottom sits at the edge of the grid and its value leans on the parabola; the two larger budgets alone give  C0.37.
+Carried 12 times past the largest budget, to the full run's compute, the fit asks for 24M parameters on 237M tokens, or 20M with the two-budget exponent. The run used 17.6M on 328M: a model 1.1 to 1.4 times smaller than the fit's choice, and so, at the same compute, trained on that many times more tokens.
+
+### Other models
+Like tinygrad's examples/ folder, two more models run on stackgrad's layers, one file each, loaded from their published weights through the safetensors reader of §8 and checked against the reference libraries.
+[CAPTION] Table A1: GPT-2 (124M parameters) in examples/gpt2.py against transformers, from tests/gpt2.py: logits for a 15-token prompt, and whether greedy decoding reproduces transformers' first 40 tokens. |
+ | stackgrad on | Largest gap | Relative to the largest logit | Same next token | Greedy text
+ | CPU (NumPy) | 1.4e−4 | 7.0e−7 | 100% | identical
+ | Apple GPU | 2.2e−4 | 1.1e−6 | 100% | identical
+Stable Diffusion v1.5 [31] turns a sentence into a 512 by 512 image with three networks: CLIP's text encoder [32], a 860M-parameter UNet that removes noise from a 4 by 64 by 64 latent over DDIM's steps [30] with classifier-free guidance [33], and a VAE decoder that turns the latent into pixels. examples/stable_diffusion.py builds all three from stackgrad's layers; the convolutions run on the GPU through im2col. Its core, condensed:
+[CODE]
+uv run python examples/stable_diffusion.py --prompt "a lighthouse at dusk"
+
+# condensed from generate() in examples/stable_diffusion.py
+tok = ClipTokenizer(path / "tokenizer")
+prompts = np.array([tok.encode(""), tok.encode(prompt)])
+context = load_clip(path, device)(prompts)          # 77 vectors per prompt
+unet = load_unet(path, device)
+for t, t_prev in zip(times, [*times[1:], -1]):     # 25 DDIM steps
+    pair = Tensor(np.concatenate([x, x]), device=device)
+    noise = unet(pair, t, context).numpy()
+    noise = noise[:1] + guidance * (noise[1:] - noise[:1])   # guidance
+    x = ddim_step(x, noise, t, t_prev)
+image = load_vae(path, device).decode(Tensor(x, device=device))  # pixels
+[/CODE]
+
+[CAPTION] Table A2: Each network of Stable Diffusion v1.5 in stackgrad against transformers (CLIP) and diffusers (UNet, VAE), from tests/stable_diffusion.py: the largest difference between the outputs, over the reference's largest value. The UNet sees a 32 by 32 latent and the VAE a 16 by 16 one; every layer still runs. |
+ | Network | Parameters | CPU (NumPy) | Apple GPU (MLX)
+ | CLIP text encoder | 123M | 5.6e−7 | 6.9e−7
+ | UNet | 860M | 8.4e−6 | 4.5e−6
+ | VAE decoder | 49.5M | 3.0e−6 | 3.4e−6stackgraddiffusers on PyTorch
+[CAPTION] Figure A2: "a watercolor painting of a lighthouse on a cliff at dusk", 25 DDIM steps, guidance 7.5, float32 on the Apple GPU from the same starting noise, from bench/stable_diffusion.py. The largest pixel difference is 3.4 of 255 levels. A step takes 2.58 s in stackgrad and 1.16 s in diffusers on the same chip.
+

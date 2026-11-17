@@ -37,7 +37,7 @@ def reward(text, gold, stopped, require_stop=True):
     """1 for a reply that stops on its own (emits <|im_end|>) with the right final number, else 0.
 
     Stopping is part of the answer. A run that scored the final number alone (require_stop=False,
-    --reward answer: runs/grpo_no_stop) learned by step 49 to never stop: every reply ran to the
+    --reward answer: runs/grpo_no_stop) learned by step 51 to never stop: every reply ran to the
     token limit, a correct answer followed by "---" separators, because nothing cost it anything to keep writing.
     """
     return float((stopped or not require_stop) and matches(final_number(text), gold))

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>stackgrad, Karpathy voice</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<style>
+  :root { --ink: #1c1c1c; --muted: #6b6b6b; --rule: #e6e2da; --accent: #2456b8; --code: #f6f4ef; --bg: #fff; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.6 "Source Sans 3", system-ui, sans-serif; }
+  main { max-width: 680px; margin: 0 auto; padding: 48px 16px 96px; }
+  header p { color: var(--muted); margin: 6px 0; }
+  h1 { font-size: 40px; line-height: 1.15; margin: 0 0 8px; }
+  h2 { font-size: 26px; margin: 56px 0 8px; padding-top: 16px; border-top: 1px solid var(--rule); }
+  h3 { font-size: 20px; margin: 32px 0 4px; }
+  a { color: var(--accent); }
+  p.origline { margin: 0; text-align: right; } a.orig { font-size: 13px; font-weight: 400; margin-left: 10px; vertical-align: middle; color: var(--muted); }
+  pre { background: var(--code); padding: 12px 14px; border-radius: 6px; overflow-x: auto; font: 13px/1.5 "JetBrains Mono", monospace; }
+  code { font-family: "JetBrains Mono", monospace; font-size: 0.84em; }
+  blockquote { margin: 18px 0; padding: 2px 14px; border-left: 3px solid var(--rule); color: #444; font-size: 15px; }
+  table { border-collapse: collapse; font-size: 14px; margin: 16px 0; display: block; overflow-x: auto; }
+  th, td { border-bottom: 1px solid var(--rule); padding: 5px 10px; text-align: left; }
+  nav ol { padding-left: 20px; } nav li span { color: var(--muted); font-size: 13px; }
+  .katex-display { overflow-x: auto; overflow-y: hidden; }
+</style></head>
+<body><main>
+<header>
+  <h1>Modern AI: Autograd to Agents</h1>
+  <p>Draft 2, in Karpathy's voice, for review before it replaces the post. Cut to about 60%, opinions in Samit's
+  voice, blog structure. Facts and numbers are the published post's; each "original" link opens that part of it.</p>
+  <p>{{TOTAL}} of prose (code and tables not counted).</p>
+</header>
+<nav><ol>{{TOC}}</ol></nav>
+{{SECTIONS}}
+</main>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body, {delimiters: [{left: '\\[', right: '\\]', display: true}, {left: '\\(', right: '\\)', display: false}], throwOnError: false})"></script>
+</body></html>

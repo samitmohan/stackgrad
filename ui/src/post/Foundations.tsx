@@ -127,6 +127,28 @@ export function Autograd() {
     def backward(self, grad):          # grad is dL/dz for z = x * y
         return grad * self.y, grad * self.x`}</pre>
       <p>
+        Each operation knows only its own inputs. <code>backward()</code> on the loss connects them: it sorts the graph so
+        every tensor comes after the tensors it was computed from, then walks it from the loss back, handing each operation
+        the gradient that has reached its output. Condensed from <code>stackgrad/tensor.py</code>, without the checks that
+        skip tensors needing no gradient (the real one walks the graph with a loop instead of recursion, so a deep graph
+        cannot hit Python's recursion limit):
+      </p>
+      <pre className="code-block">{`def backward(self):
+    topo, seen = [], set()
+    def build(t):                        # every tensor after the tensors it was computed from
+        if t not in seen:
+            seen.add(t)
+            if t._ctx:
+                for parent in t._ctx.parents:
+                    build(parent)
+            topo.append(t)
+    build(self)
+    self.grad = ones_like(self.data)     # dL/dL = 1
+    for t in reversed(topo):             # from the loss back to the inputs
+        if t._ctx:
+            for parent, g in zip(t._ctx.parents, t._ctx.backward(t.grad)):
+                parent.grad = g if parent.grad is None else parent.grad + g`}</pre>
+      <p>
         All of stackgrad's gradients live in one file, <code>mlops.py</code>, in nineteen such operations: add, multiply,
         reciprocal, exponential, logarithm, sigmoid, power, sum, max, reshape, transpose, broadcast, indexing, concatenation,
         matrix multiplication, and a few more. Subtraction is adding a negation, and division is multiplying by a reciprocal.
@@ -189,7 +211,8 @@ export function Autograd() {
         Every operation so far ran the moment it was written. stackgrad now waits: <code>c = a @ b</code> records the
         multiplication and its inputs and returns a tensor that knows its shape and dtype but holds no numbers. The
         numbers are computed when something reads them, through <code>.numpy()</code>, <code>.item()</code>, printing,{" "}
-        <code>.backward()</code>, or <code>.realize()</code>. tinygrad works the same way <Cite k="tinygrad" />.
+        <code>.backward()</code>, or <code>.realize()</code>. tinygrad works the same way <Cite k="tinygrad" />, and so does MLX, the library behind the Apple GPU
+        backend of §6.
       </p>
       <pre className="code-block">{`c = a @ b      # recorded: c.shape is known, nothing has run
 y = layer(x)   # recorded and returned: still nothing has run

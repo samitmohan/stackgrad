@@ -203,6 +203,15 @@ export function Training() {
         times: take {c?.batch ?? "…"} random windows of {c?.context ?? "…"} tokens from the text, compute the loss at every
         position, run backward, and update every weight.
       </p>
+      <p>In code, condensed from <code>train_gpt.py</code>:</p>
+      <pre className="code-block">{`for step in range(1, steps + 1):
+    opt.lr = cosine_lr(step, max_lr, min_lr, warmup, steps)   # warmup, then cosine decay
+    x, y = get_batch(train, batch, context)                   # y is x shifted by one token
+    loss = cross_entropy_loss(model(x), y)
+    opt.zero_grad()
+    loss.backward()
+    clip_grad_norm(params, 1.0)
+    opt.step()                                                # AdamW`}</pre>
       <Aside title="The parts of a training step">
         <ul>
           <li>

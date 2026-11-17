@@ -107,7 +107,7 @@ export function Lora() {
   const loraParams = q ? Number(q.n_layers) * perLayer.reduce((acc, [a, b]) => acc + rank * (width(a) + width(b)), 0) : undefined;
   const base = r.gsmBase, tuned = r.gsmLora;
   const ck = (c: typeof r.ckC, on: boolean, micro: number) => c?.rows.find((x) => x.checkpointing === on && x.micro === micro);
-  const fullOn = ck(r.ckC, true, 8), bestOff = r.ckC?.rows.filter((x) => !x.checkpointing && x.peak_gb).at(-1);
+  const fullOn = ck(r.ckC, true, 8);
   const minutes = (name: string) => {
     const last = r.runs.find((x) => x.name === name)?.last;
     return last ? last.time / 60 : undefined;
@@ -139,17 +139,14 @@ export function Lora() {
         training problems, learning to produce the solutions while the loss ignores the question. I fixed the evaluation
         protocol before training: the first {int(base?.n)} test problems, the same prompt asking for the answer after{" "}
         <code>####</code>, greedy decoding with thinking mode off, and at most 320 new tokens. A problem counts as solved when
-        its final number equals the reference. The final number is the one after the first <code>####</code>, else the one in
-        the first <code>{String.raw`\boxed{}`}</code>, else the reply's last number. I take the first match because a reply
-        that runs to the limit often repeats its boxed answer and gets cut off inside the last box, as in{" "}
-        <code>{String.raw`\boxed{70000} ... \boxed{7`}</code>.
+        its final number, the first <code>####</code> or <code>{String.raw`\boxed{}`}</code> answer, equals the reference
+        (<code>bench/gsm8k.py</code> says why the first).
       </p>
-      {r.ckC && fullOn && bestOff && (
+      {r.ckC && fullOn && (
         <p>
-          Training keeps every activation until backward has used it. <b>Activation checkpointing</b> <Cite k="checkpoint" />{" "}
-          keeps only each block's input and recomputes the rest during backward, which fits a batch of {int(r.ckC.examples)}{" "}
-          examples into {num(fullOn.peak_gb, 3)} GB on the 3090; without it the most that fits is {bestOff.micro} per pass, at{" "}
-          {num(bestOff.peak_gb, 3)} GB (<Res f="checkpointing_cuda.json" />).
+          This run kept every activation for backward and fit {int(run?.config.micro as number)} examples per pass.{" "}
+          <b>Activation checkpointing</b> <Cite k="checkpoint" />, which keeps only each block's input and recomputes the rest
+          during backward, fits all {int(r.ckC.examples)} in {num(fullOn.peak_gb, 3)} GB on the 3090 (<Res f="checkpointing_cuda.json" />).
         </p>
       )}
       {base ? (
@@ -175,6 +172,28 @@ export function Lora() {
             steps and gets more answers right. The loss rewards replies that read like the reference solution, while Table 5
             counts whether the final number is right, and nothing in this training run rewarded that.
           </p>
+          <p>
+            Problem 56 shows the change. It has the shortest correct reply from the released model among the{" "}
+            {r.vsLora ? r.vsLora.broke : "…"} problems LoRA broke (<Res f="gsm8k_base_replies.jsonl" />,{" "}
+            <Res f="gsm8k_lora_gsm8k_replies.jsonl" />). Peter buys a $7 ticket and $7 popcorn each time, with $42 to spend.
+            The released model, in 83 tokens:
+          </p>
+          <pre className="code-block">{String.raw`Step 1: Peter pays $7 for a movie ticket and $7 for popcorn.
+So, each movie visit costs **$14**.
+
+Step 2: He has **$42** for the week.
+How many times can he go to the movies?
+
+$$
+\frac{42}{14} = 3
+$$
+
+**Final Answer:**
+#### 3`}</pre>
+          <p>After LoRA, in 28 tokens and GSM8K's terse style, the popcorn is gone:</p>
+          <pre className="code-block">{`Peter can buy 42/7 = 6 tickets.
+So he can go to the movies 6 times.
+#### 6`}</pre>
         </>
       )}
       {r.gsmLora64 && (
@@ -257,13 +276,17 @@ export function Grpo() {
         A reply better than its group's average gets a positive <b>advantage</b> <TeX>A_i</TeX> and becomes likelier, and a
         worse one becomes less likely. A group whose replies all scored the same, all right or all wrong, says nothing about
         which reply was better: every advantage in it is zero, and stackgrad skips those replies in the update. A reply's
-        log-probabilities are summed and divided by <TeX>B</TeX>, the same 320-token budget for every reply. CS336's version
-        divides each reply by its own length <TeX>{String.raw`|o_i|`}</TeX> instead, which, Liu et al. <Cite k="drgrpo" /> point
-        out, gives a long wrong reply a smaller push per token than a short one. Their Dr. GRPO drops that division and the one
-        by the standard deviation; stackgrad drops only the first. CS336's version also clips how far one update may move a
-        probability, which matters when one batch of replies trains several updates. stackgrad makes one update per batch, and
-        there the clipped loss and this one have the same gradient.
+        log-probabilities are summed and divided by <TeX>B</TeX>, the same 320-token budget for every reply, not by the
+        reply's own length, which would give a long wrong reply a smaller push per token than a short one (Liu et al.{" "}
+        <Cite k="drgrpo" />).
       </p>
+      <p>
+        In code the loss is a weighted sum of the replies' token log-probabilities, condensed from <code>policy_loss</code>{" "}
+        in <code>train_grpo.py</code>:
+      </p>
+      <pre className="code-block">{`logp = log_softmax(logits, axis=-1)[rows, targets]                  # each reply token's log-probability
+weight = np.repeat(advantages / budget / n_replies, reply_lengths)  # A_i / (B N), once per token
+loss = -(logp * weight).sum()`}</pre>
       <Aside title="Four replies to one question">
         <p>
           Say one reply of four is right: scores 1, 0, 0, 0. The mean is 0.25 and the standard deviation 0.433, so the right
@@ -349,6 +372,19 @@ export function Grpo() {
             {base.correct} before training, and {int(after.hit_token_limit)} of its replies hit the limit, against{" "}
             {int(base.hit_token_limit)}.
           </p>
+          <p>
+            On problem 56 from §11 the adapter writes 183 tokens, against the released model's 83, and drops the popcorn the
+            way the LoRA model did (<Res f="gsm8k_grpo_gsm8k_replies.jsonl" />, shortened):
+          </p>
+          <pre className="code-block">{String.raw`Each movie ticket costs $7 and popcorn also costs $7.
+...
+Each movie costs $7$ dollars.
+...
+So, $ 7n \leq 42 $
+
+Therefore, $ n \leq \frac{42}{7} = 6 $
+...
+**Answer:** $\boxed{6}$`}</pre>
           <p>
             Problem by problem, the adapter solved {vs.fixed} problems the released model missed and missed {vs.broke} that
             it had solved. If training had changed nothing, each of those {vs.fixed + vs.broke} disagreements would fall either way

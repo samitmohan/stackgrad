@@ -74,7 +74,8 @@ export function Appendix() {
             pass, and twice that in the backward. The full run spent <TeX>{tex10(sc.cs336_budget)}</TeX> of them. The same
             compute could buy a larger model trained on fewer tokens, or a smaller one on more. Hoffmann et al.{" "}
             <Cite k="chinchilla" /> find the best split with IsoFLOP curves: fix a budget <TeX>C</TeX>, train models of several
-            sizes <TeX>N</TeX>, each on <TeX>C/6N</TeX> tokens, and see which ends lowest. I ran three budgets, from{" "}
+            sizes <TeX>N</TeX>, counting only the weights in matrix products (the embedding table is a lookup and multiplies
+            nothing, so the story model counts as {num(usedN / 1e6, 3)}M), each on <TeX>C/6N</TeX> tokens, and see which ends lowest. I ran three budgets, from{" "}
             <TeX>{tex10(opt[0].budget)}</TeX> to <TeX>{tex10(opt[2].budget)}</TeX> operations, with five sizes each (Figure A1).
           </p>
           <Fig n="A1" caption={<>IsoFLOP curves from <code>scripts/scaling.py</code>: the final validation loss of TinyStories models of five sizes, each trained on exactly its budget's tokens. Darker lines spend more compute. A ring marks the bottom of the parabola fitted to each curve.</>}>
