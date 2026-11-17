@@ -11,10 +11,10 @@ from agent import calculate
 
 
 def main():
-    cases = {"17 * 23 + 9": "400", "$1,250 * 20%": "250", "7 // 2": "3", "10 / 4": "2.5", "-(2 - 5) ** 2": "-9"}
+    cases = {"17 * 23 + 9": "400", "$1,250 * 20%": "250", "7 // 2": "3", "10 / 4": "2.5", "-(2 - 5) ** 2": "-9", "30% of 120": "36"}
     for expression, want in cases.items():
         assert calculate(expression) == want, (expression, calculate(expression))
-    print(f"[ok]   {len(cases)} expressions, GSM8K's $ , and % included")
+    print(f"[ok]   {len(cases)} expressions, GSM8K's $ , % and 'of' included")
     for hostile in ['__import__("os").system("ls")', "open('x')", "(1).__class__", "[1] * 10", "2 ** 10000", "9 ** 9 ** 9"]:
         assert calculate(hostile).startswith("error"), hostile
     print("[ok]   names, calls, attributes, lists, and huge powers come back as errors, never run")

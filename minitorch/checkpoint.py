@@ -16,7 +16,7 @@ from .mlops import Function
 
 class _Checkpoint(Function):
     def forward(self, *arrays, fn):
-        self.fn, self.arrays = fn, arrays
+        self.fn, self.arrays, self.cast = fn, arrays, T._autocast
         device = self.parents[0].device
         with T.no_grad():
             out = fn(*[T.Tensor(a, device=device) for a in arrays]).data
@@ -27,7 +27,8 @@ class _Checkpoint(Function):
     def backward(self, grad):
         device = self.parents[0].device
         leaves = [T.Tensor(a, requires_grad=needs, device=device) for a, needs in zip(self.arrays, self.needs_grad)]
-        out = self.fn(*leaves)
+        with T.autocast(self.cast):  # recompute in the forward's precision: backward usually runs outside autocast
+            out = self.fn(*leaves)
         # d/d(anything) of sum(out * grad) is grad pushed back through fn: weights inside fn collect their .grad here
         (out * T.Tensor(grad, device=device)).sum().backward()
         # finish this block's backward now, so its recomputed activations are freed before the next block's arrive

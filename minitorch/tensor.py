@@ -335,7 +335,7 @@ class Tensor:
         return 2.0 * (2.0 * self).sigmoid() - 1.0
 
     def abs(self):
-        return self * Tensor(backend.get(self.device).sign(self.data), device=self.device)
+        return where(self < 0, -self, self)
 
     def clamp(self, min_val=None, max_val=None):
         out = self

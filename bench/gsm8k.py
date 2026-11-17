@@ -5,8 +5,10 @@
 
 The protocol is fixed so that the two numbers compare: the first --n questions of the
 test split, the same prompt, greedy decoding, thinking off, at most 320 new tokens.
-A reply scores if its final answer equals the reference: the number after "####", else the
-one in \\boxed{} (the base model's habit), else the reply's last number.
+A reply scores if its final answer equals the reference: the number after the first "####", else
+the one in the first \\boxed{} (the base model's habit), else the reply's last number. The first, because
+a reply that never stops repeats its answer until the 320-token limit cuts it off, often inside a box:
+"\\boxed{70000} ... \\boxed{7". Taking the last box instead flips 25 of runs/grpo_no_stop's 250 verdicts.
 Writes bench/results/gsm8k_<name>.json, and every reply alongside it.
 """
 import argparse
@@ -31,12 +33,17 @@ def final_number(text):
     """The number after "####", else inside \\boxed{}, else the last number in the text, as a float (None if none)."""
     m = re.search(rf"####\s*({NUMBER})", text) or re.search(rf"\\boxed\{{\s*({NUMBER})", text)
     found = [m.group(1)] if m else re.findall(NUMBER, text)
-    if not found:
-        return None
-    try:
-        return float(found[-1].replace(",", "").replace("$", ""))
-    except ValueError:
-        return None
+    return float(found[-1].replace(",", "").replace("$", "")) if found else None  # NUMBER only matches what float() parses
+
+
+def gold_number(answer):
+    """The reference answer of a GSM8K solution: the number after its "####"."""
+    return float(answer.split("####")[-1].strip().replace(",", ""))
+
+
+def matches(got, gold):
+    """Whether a reply's final number (final_number's result) is the reference. The GRPO reward and the agent use it too."""
+    return got is not None and abs(got - gold) < 1e-6
 
 
 def main():
@@ -65,9 +72,8 @@ def main():
         ids = np.array([tok.encode(chat_prompt([{"role": "user", "content": PROMPT.format(question=q["question"])}]))])
         out = model.generate(ids, args.max_new, temperature=0, eos_id=eos)[0, ids.shape[1]:].tolist()
         reply = tok.decode([t for t in out if t != eos])
-        gold = float(q["answer"].split("####")[-1].strip().replace(",", ""))
-        got = final_number(reply)
-        ok = got is not None and abs(got - gold) < 1e-6
+        gold, got = gold_number(q["answer"]), final_number(reply)
+        ok = matches(got, gold)
         correct += ok
         new_tokens += len(out)
         rows.append({"i": i, "gold": gold, "got": got, "correct": ok, "tokens": len(out), "reply": reply})

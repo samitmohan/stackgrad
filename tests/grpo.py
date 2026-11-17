@@ -36,6 +36,7 @@ def main():
 
     assert reward("so the total is\n#### 1,250", 1250, stopped=True) == 1.0
     assert reward("#### 1250 ---", 1250, stopped=False) == 0.0  # right number, but cut off at the token limit
+    assert reward("#### 1250 ---", 1250, stopped=False, require_stop=False) == 1.0  # --reward answer: runs/grpo_no_stop's
     assert reward("#### 1249", 1250, stopped=True) == 0.0
     print("[ok]   reward: 1 only for a reply that stops on its own with the right final number")
 

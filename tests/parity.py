@@ -280,6 +280,25 @@ def _():
     assert (sample(logits, top_p=1e-6) == best).all()
 
 
+@check("sampling: top_p keeps the nucleus a full sort keeps, so draws match it id for id")
+def _():
+    from minitorch.sampling import sample
+    logits = r(64, 3000) * 4
+    probs = np.exp(logits - logits.max(-1, keepdims=True))
+    probs /= probs.sum(-1, keepdims=True)
+    order = np.argsort(-probs, axis=-1)
+    for top_p in (0.5, 0.9, 0.95, 1.0):
+        nucleus = np.take_along_axis(probs, order, -1)
+        nucleus[np.cumsum(nucleus, -1) - nucleus >= top_p] = 0.0
+        ref = np.zeros_like(probs)
+        np.put_along_axis(ref, order, nucleus, -1)
+        ref /= ref.sum(-1, keepdims=True)
+        np.random.seed(0)
+        want = [np.random.choice(len(q), p=q) for q in ref]
+        np.random.seed(0)
+        assert (sample(logits, top_p=top_p) == want).all(), top_p
+
+
 @check("sampling on the device: greedy picks argmax, and draws follow softmax(logits / T)")
 def _():
     from minitorch.sampling import sample_on_device

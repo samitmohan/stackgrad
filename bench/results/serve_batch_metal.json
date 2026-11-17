@@ -1,0 +1,81 @@
+{
+ "device": "Apple M4 GPU",
+ "model": "Qwen3-0.6B",
+ "dtype": "bfloat16",
+ "new_tokens": 128,
+ "prompt_tokens": [
+  99,
+  60,
+  91,
+  69,
+  145,
+  90,
+  76,
+  104
+ ],
+ "repeats": 3,
+ "rows": [
+  {
+   "mode": "one forward per sequence",
+   "concurrent": 1,
+   "seconds": 5.539,
+   "tokens_per_s": 23.1,
+   "decode_step_ms": 42.93
+  },
+  {
+   "mode": "one forward per step",
+   "concurrent": 1,
+   "seconds": 5.674,
+   "tokens_per_s": 22.6,
+   "decode_step_ms": 44.37,
+   "identical_replies": 1
+  },
+  {
+   "mode": "one forward per sequence",
+   "concurrent": 2,
+   "seconds": 11.395,
+   "tokens_per_s": 22.5,
+   "decode_step_ms": 87.16
+  },
+  {
+   "mode": "one forward per step",
+   "concurrent": 2,
+   "seconds": 5.257,
+   "tokens_per_s": 48.7,
+   "decode_step_ms": 38.11,
+   "identical_replies": 0
+  },
+  {
+   "mode": "one forward per sequence",
+   "concurrent": 4,
+   "seconds": 21.766,
+   "tokens_per_s": 23.5,
+   "decode_step_ms": 170.64
+  },
+  {
+   "mode": "one forward per step",
+   "concurrent": 4,
+   "seconds": 6.033,
+   "tokens_per_s": 84.9,
+   "decode_step_ms": 43.7,
+   "identical_replies": 2
+  },
+  {
+   "mode": "one forward per sequence",
+   "concurrent": 8,
+   "seconds": 47.794,
+   "tokens_per_s": 21.4,
+   "decode_step_ms": 360.23
+  },
+  {
+   "mode": "one forward per step",
+   "concurrent": 8,
+   "seconds": 7.972,
+   "tokens_per_s": 128.4,
+   "decode_step_ms": 58.34,
+   "identical_replies": 4
+  }
+ ],
+ "float32_identical_replies": 8,
+ "float32_requests": 8
+}

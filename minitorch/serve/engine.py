@@ -4,8 +4,8 @@
     tokens = engine.submit(prompt_ids, max_tokens=200, eos_id=eos)   # a queue.Queue
     for token in iter(tokens.get, None): ...
 
-Requests from many callers interleave at the granularity of one scheduler step, which is
-continuous batching (scheduler.py) seen from the outside.
+Requests from many callers join and leave between scheduler steps and share each decode step,
+which is continuous batching (scheduler.py) seen from the outside.
 """
 import itertools
 import queue

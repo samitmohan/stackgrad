@@ -6,17 +6,24 @@ Writes, under that site's root:
   src/paper/minitorch/data/results.json  what /api/bench, /api/runs and the metric streams give the live post
   src/paper/minitorch/data/replays.json  bench/replays/ (scripts/record_replays.py), for the figures that call the server
   public/paper/minitorch/                the attention patterns (fetched by their figure) and Stable Diffusion's images
+Then it fails if any section's paragraphs (<p> blocks) read differently in ui/src/post and in the port: a prose edit
+goes into both. Captions, figures and the header (Head.tsx, kit.tsx) may differ, since the port replays the live figures.
 """
 
 import argparse
+import difflib
 import json
+import re
 import shutil
+import sys
 from pathlib import Path
 
 from minitorch.serve.api import RUNS, _read_jsonl, bench, runs
 
 ROOT = Path(__file__).resolve().parent.parent
 CURVE_POINTS = 700  # RunCurve draws at most this many points; sending more to a static page only adds bytes
+PARAGRAPH = re.compile(r"<p(?:\s[^>]*)?>(.*?)</p>", re.DOTALL)
+CHROME = {"Head.tsx", "kit.tsx"}  # the port's header and data loading are its own
 
 
 def downsample(rows, n):
@@ -54,6 +61,17 @@ def attention(patterns):
                                                  for head in layer] for layer in p["layers"]]} for p in patterns]
 
 
+def prose_drift(port):
+    """A diff of every section's paragraphs, whitespace aside, between ui/src/post and the port's copy; empty if they match."""
+    def paragraphs(f):
+        return [" ".join(p.split()) for p in PARAGRAPH.findall(f.read_text())]
+    drift = []
+    for f in sorted((ROOT / "ui" / "src" / "post").glob("*.tsx")):
+        if f.name not in CHROME and (port / f.name).exists():  # Post.tsx is the live page's shell, Paper.tsx the port's
+            drift += difflib.unified_diff(paragraphs(port / f.name), paragraphs(f), f"port {f.name}", f"ui {f.name}", n=0, lineterm="")
+    return drift
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("site", type=Path, help="the site's root, holding src/ and public/")
@@ -81,6 +99,11 @@ def main():
 
     for f in [data / "results.json", data / "replays.json", public / "attention.json"]:
         print(f"{f.relative_to(site)}: {f.stat().st_size / 1024:.0f} KB")
+
+    drift = prose_drift(site / "src" / "paper" / "minitorch" / "post")
+    if drift:
+        sys.exit("The post's paragraphs and the port's differ; make each edit in both:\n" + "\n".join(drift))
+    print("prose: every section's paragraphs match the port's")
 
 
 if __name__ == "__main__":

@@ -41,7 +41,6 @@ export function Tldr() {
   const r = useResults();
   return (
     <div className="tldr">
-      <b>Abstract</b>
       <p>
         minitorch is a deep learning framework written from scratch in {int(r.lines?.package)} lines of Python, built in the
         order a study plan would take: reverse-mode automatic differentiation, a transformer trained from nothing, GPU backends
@@ -67,14 +66,14 @@ export function Teaser() {
   const r = useResults();
   const bars = (r.attn ?? []).filter((x) => x.shape === "CS336 training" && x.dtype === "float32");
   const slowest = Math.max(1e-9, ...bars.map((x) => x.ms));
-  // Apple's kernel in pink, my fastest in blue, the earlier attempts in gray
+  // MLX's sdpa in pink (unfused at head width 32), my fastest in blue, the earlier attempts in gray
   const barColor = (impl: string) => {
     if (impl.startsWith("mx.")) return GRAD;
     if (impl.startsWith("v3")) return FWD;
     return RULE;
   };
   return (
-    <Fig n={1} caption={<>Three results, each read live from the project's result files. Left: minitorch (thin blue) and PyTorch (wide pink) train the same model and their losses overlap step for step. Middle: the story model's validation loss over {int(r.cfg?.steps)} training steps. Right: time to compute attention at the training shape, shorter is faster: my kernel in blue, Apple's in pink, earlier attempts in gray.</>}>
+    <Fig n={1} caption={<>Three results, each read live from the project's result files. Left: minitorch (thin blue) and PyTorch (wide pink) train the same model and their losses overlap step for step. Middle: the story model's validation loss over {int(r.cfg?.steps)} training steps. Right: time to compute attention at the training shape, shorter is faster: my kernel in blue, MLX's in pink (it has no fused kernel for heads this narrow), earlier attempts in gray.</>}>
       <div className="teaser">
         <div>
           <div className="spark">
@@ -113,7 +112,7 @@ export function Teaser() {
             ))}
           </div>
           <b>{num(r.kernelWin, 2)}x</b>
-          <span>faster than Apple's attention kernel</span>
+          <span>faster than MLX's unfused attention</span>
         </div>
       </div>
     </Fig>

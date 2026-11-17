@@ -35,6 +35,8 @@ jobs:
         run: uv run python tests/agent.py
       - name: Mixed precision (16-bit multiplies, float32 weights and gradients)
         run: uv run python tests/mixed_precision.py
+      - name: Lazy evaluation (ops record without running, each runs once when read, results match NumPy)
+        run: uv run python tests/lazy.py
 
   ui:
     runs-on: ubuntu-latest

@@ -26,8 +26,8 @@ class Conv2d(Module):
         self.bias = Tensor(np.zeros(out_channels, dtype=np.float32), requires_grad=True)
 
     def forward(self, x):
-        assert x.data.ndim == 4, f"Conv2d expects 4D input (N,C,H,W), got {x.data.ndim}D"
-        N, _, H, W = x.data.shape
+        assert x.ndim == 4, f"Conv2d expects 4D input (N,C,H,W), got {x.ndim}D"
+        N, _, H, W = x.shape
         kh, kw = self.kernel_size
         OH = (H + 2 * self.padding - kh) // self.stride + 1
         OW = (W + 2 * self.padding - kw) // self.stride + 1
@@ -46,8 +46,8 @@ class MaxPool2d(Module):
         self.stride = stride if stride is not None else self.kernel_size[0]
 
     def forward(self, x):
-        assert x.data.ndim == 4, f"MaxPool2d expects 4D input (N,C,H,W), got {x.data.ndim}D"
-        N, C, H, W = x.data.shape
+        assert x.ndim == 4, f"MaxPool2d expects 4D input (N,C,H,W), got {x.ndim}D"
+        N, C, H, W = x.shape
         kh, kw = self.kernel_size
         OH = (H - kh) // self.stride + 1
         OW = (W - kw) // self.stride + 1
@@ -63,5 +63,5 @@ class Flatten(Module):
         super().__init__()
 
     def forward(self, x):
-        batch_size = x.data.shape[0]
+        batch_size = x.shape[0]
         return x.reshape(batch_size, -1)

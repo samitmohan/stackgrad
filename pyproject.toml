@@ -10,8 +10,6 @@ authors = [{name = "Samit Mohan"}]
 requires-python = ">=3.10"
 dependencies = [
     "numpy",
-    "matplotlib",
-    "scikit-learn",
     "regex",
 ]
 
@@ -36,6 +34,7 @@ dev = [
     "huggingface_hub",
     "ruff",
     "diffusers>=0.41.0",
+    "matplotlib",
 ]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]

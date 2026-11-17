@@ -24,9 +24,6 @@ the previous result left open and ends on a measured answer. Story order:
 6. Using it: RAG and an agent on my server, with tracing.
 7. Last section: Stable Diffusion, the same framework drawing an image (M6).
 
-Interactive version with diagrams: `docs/plan/` (run `gen.py`, then render with the
-excalidraw CLI, then `build.py`).
-
 ## Rules
 
 - Backends: NumPy (reference), MLX (Metal), and CuPy (CUDA) for training throughput
@@ -94,14 +91,16 @@ excalidraw CLI, then `build.py`).
   mask in mlops.Attention, so many problems' samples decode in one batch. Prefix sharing is
   skipped: a group's 8 copies of a ~150-token prompt cost one prefill pass, against ~320
   decode steps after it (prefill share to be measured).
-- `mx.compile` on the decode step. Quantized serving.
+  Server too (2026-11-16): the runner decodes every live request in one forward pass over left-padded caches,
+  re-padded only when a request joins or leaves; each row's RoPE positions start at 0 after its padding.
+  bench/serve_batch.py measures it against one pass per sequence (post §9).
+- Quantized serving. Cut 2026-11-16: `mx.compile` on the decode step (the KV cache grows a token per step, so a
+  compiled step retraces every token without a fixed-shape cache).
 - Speculative decoding (2026-11-05: required, no longer a stretch): Qwen3-0.6B drafts for
   Qwen3-1.7B. It is a decoding method, independent of the architecture.
 - Done when: GRPO-shaped load (N prompts x G samples) is measured with and without batching
   and prefix sharing; speculative decoding's acceptance rate and tokens/s are measured;
-  `mx.compile` on vs off is measured; one row compares against mlx-lm.
-  Open 2026-11-06: `mx.compile` is unmeasured. The decode step's KV cache grows a token per step, so a
-  compiled step retraces every token without a fixed-shape cache. Keep or cut: the user's call.
+  one row compares against mlx-lm.
 
 **M5. End-to-end apps** (study Phase 5: RAG, agents)
 - The agent and the RAG pipeline call your server's OpenAI endpoint.
@@ -122,7 +121,7 @@ excalidraw CLI, then `build.py`).
 
 **CS336 coverage** (decided 2026-11-05; Spring 2026 handouts; each lands as a section of the post)
 - A1 experiments: the four ablations (no RMSNorm, post-norm, NoPE, SiLU vs SwiGLU), in the
-  post's model section. Optimizer state in checkpoints (code only, no section). FLOP and
+  post's model section. FLOP and
   memory accounting inline where the post uses it. Cut 2026-11-05: the OpenWebText run and
   standalone learning-rate and batch-size sweeps (scaling laws carry the learning-rate sweep).
 - A2 systems: a benchmarking and profiling harness, mixed-precision training, memory
@@ -141,12 +140,12 @@ excalidraw CLI, then `build.py`).
   Done 2026-11-06 (post §12): a reward without the stop requirement was hacked by step 51 (every reply
   ran to the cap); with it, 139/250 vs 152, fixed 25 / broke 38, p = 0.13 (bench/gsm8k_compare.py).
   A1, A2, A3 done the same day: ablations in §5, profiling and Triton FA2 in §7; scaling laws,
-  mixed precision, and checkpointing in the appendix. Except: A1's optimizer state in checkpoints is not built
-  (train_gpt.py saves weights only, no AdamW m/v/t or step, no --resume). Build it or cut it: the user's call.
+  mixed precision, and checkpointing in the appendix. Cut 2026-11-16: A1's optimizer state in checkpoints
+  (train_gpt.py saves weights only, no AdamW m/v/t or step, no --resume; no run in the post resumes).
 
 **M6. Model examples, tinygrad style** (2026-11-05: GPT-2 and Stable Diffusion; not Mamba or
 SDXL. Llama 3 dropped 2026-11-05, user decision)
-- One file each, like tinygrad's `examples/`: `examples/gpt2.py`, `examples/llama3.py`,
+- One file each, like tinygrad's `examples/`: `examples/gpt2.py` and
   `examples/stable_diffusion.py`. Each loads the published weights through `state.py` and runs
   on minitorch's backends.
 - GPT-2 (124M): LayerNorm, learned positions, GELU, biases; logit parity against HF.
@@ -174,8 +173,3 @@ SDXL. Llama 3 dropped 2026-11-05, user decision)
 - Study plan: done 2026-11-06, `docs/guide.md` (replaced `docs/reading-guide.md`).
 - Rename: "minitorch" collides with Cornell's minitorch course and an existing PyPI
   package.
-
-## History
-
-The earlier detailed v2 spec (tinygrad reading ladder, measured baseline table) lives
-in `docs/spec-v2-detailed.md`.

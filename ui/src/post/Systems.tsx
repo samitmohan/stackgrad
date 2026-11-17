@@ -1,6 +1,6 @@
 import { AttentionTable, Matmul, OpCost, StepBars } from "../figures/BenchCharts";
 import { Chat } from "../figures/Chat";
-import { Aside, Cite, Fig, Section, TeX, int, num, pct, sci, useResults } from "./kit";
+import { Aside, Cite, Fig, Res, Section, TeX, int, num, pct, sci, useResults } from "./kit";
 
 export function Gpu() {
   const r = useResults();
@@ -33,8 +33,8 @@ export function Gpu() {
       <p>
         <code>tests/backends.py</code> checks each GPU backend against NumPy. Of {int(bkM?.ops.total)} gradient checks,{" "}
         {int(bkM?.ops.agree)} agree on the Apple GPU and {bkC ? int(bkC.ops.agree) : "…"} on the NVIDIA GPU, and the story
-        model, trained on each from the same weights and batches, stays within {sci(r.worstTrainGap)} of NumPy's loss (Table
-        A1 in the appendix).
+        model, trained on each from the same weights and batches, stays within {sci(r.worstTrainGap)} of NumPy's loss (<Res f="backends_metal.json" />,{" "}
+        <Res f="backends_cuda.json" />).
       </p>
       <h3>A GPU does not win by default</h3>
       <p>
@@ -67,7 +67,7 @@ export function Gpu() {
         <p>
           Training can spend that speed through <b>mixed precision</b> <Cite k="mixed" />, which multiplies in 16 bits while the
           weights stay in float32. On the NVIDIA GPU it takes a step of the story model from {num(c32.step_ms, 3)} ms to{" "}
-          {num(c16.step_ms, 3)} ms and moves the loss by {num(r.mpC.last_50_loss_gap, 2)} (appendix, Mixed precision).
+          {num(c16.step_ms, 3)} ms and moves the loss by {num(r.mpC.last_50_loss_gap, 2)} (<Res f="mixed_precision_cuda.json" />).
         </p>
       )}
       <p>
@@ -147,10 +147,11 @@ export function Attention() {
       <p>
         All three handle grouped-query heads and the offsets a cache needs during generation, and{" "}
         {r.bkM?.kernels ? `${r.bkM.kernels.within_tolerance} of ${r.bkM.kernels.total} runs across versions and shapes match` : "they match"} a 64-bit
-        reference to within {sci(r.bkM?.kernels?.tolerance, 0)}. Table 3 times them against MLX's own fused attention kernel.
+        reference to within {sci(r.bkM?.kernels?.tolerance, 0)}. Table 3 times them against MLX's scaled_dot_product_attention, which runs a fused kernel when each head is 64 or 128
+        numbers wide and, at 32, falls back to separate matrix products and a softmax.
       </p>
       {r.attn && (
-        <Fig n={3} table wide caption={<>Time in milliseconds to compute attention on the Apple GPU (bold is the fastest in each row). "Materialized scores" is the version built from basic operations. v3 runs {num(r.kernelWin, 2)}x faster than MLX's kernel at the training shape, where each head is 32 numbers wide, and {num(r.kernelLoss, 2)}x slower at Qwen3's shape, 128 wide, where MLX's kernel wins. For generating one token at a time (decode), v1 takes {num(r.decodeRatio, 3)}x MLX's time.</>}>
+        <Fig n={3} table wide caption={<>Time in milliseconds to compute attention on the Apple GPU (bold is the fastest in each row). "Materialized scores" is the version built from basic operations. v3 runs {num(r.kernelWin, 2)}x faster than MLX at the training shape, where each head is 32 numbers wide and MLX's time matches the materialized version's, and {num(r.kernelLoss, 2)}x slower than MLX's fused kernel at Qwen3's shape, 128 wide. For generating one token at a time (decode), v1 takes {num(r.decodeRatio, 3)}x MLX's time.</>}>
           <AttentionTable rows={r.attn} />
         </Fig>
       )}
@@ -172,7 +173,7 @@ export function Attention() {
             before the next one starts, so each one's time is its own. One forward and backward pass of the story model on{" "}
             {int(p.batch)} sequences of {int(p.context)} tokens takes {num(p.profiled_ms, 3)} ms this way on the Apple GPU. A
             normal step, optimizer included, takes {num(p.step_ms, 3)} ms, because there the GPU queues work without waiting.
-            Table A3 in the appendix lists every primitive.
+            <Res f="profile_metal.json" /> lists every primitive.
           </p>
           <p>
             Matrix multiplications take the most time: {num(opMs("Matmul backward"), 3)} ms backward and{" "}
@@ -202,8 +203,8 @@ export function Attention() {
           <p>
             At the training shape, forward and backward together take {num(faT.forward_backward_ms, 3)} ms, against{" "}
             {num(faC.forward_backward_ms, 3)} ms for the composed version, {num(faC.forward_backward_ms / faT.forward_backward_ms, 2)}x
-            faster (Table A4 lists every shape).
-            {pc && <> In a profiled training step on the NVIDIA GPU, attention's backward takes {pct(share(pc, "Attention backward"), 1)} of the time, where on the Apple GPU, with the composed backward, it took {pct(share(p, "Attention backward"), 1)} (Table A3).</>}
+            faster (<Res f="flash_attention_cuda.json" /> lists every shape).
+            {pc && <> In a profiled training step on the NVIDIA GPU, attention's backward takes {pct(share(pc, "Attention backward"), 1)} of the time, where on the Apple GPU, with the composed backward, it took {pct(share(p, "Attention backward"), 1)} (<Res f="profile_cuda.json" />).</>}
           </p>
         </>
       )}
@@ -215,6 +216,12 @@ export function Serving() {
   const r = useResults();
   const s = r.serve;
   const tight = s?.scenarios.find((x) => x.preemptions > 0);
+  const sb = r.serveBatch;
+  const at = (mode: string, n: number) => sb?.rows.find((x) => x.mode === mode && x.concurrent === n);
+  const most = Math.max(0, ...(sb?.rows ?? []).map((x) => x.concurrent));
+  const alone = at("one forward per step", 1);
+  const perSeq = at("one forward per sequence", most);
+  const batched = at("one forward per step", most);
   return (
     <Section id="serving" n={9} title="Can it serve two people at once?">
       <p>
@@ -227,40 +234,58 @@ export function Serving() {
       </p>
       <p>
         That memory limits how many people one GPU can serve. Reserving the maximum length for each request wastes the part a
-        short reply never uses. A <b>block manager</b> hands out cache memory in small fixed-size blocks as
-        a sequence grows and takes them back the moment it finishes, the bookkeeping behind vLLM's PagedAttention{" "}
-        <Cite k="paged" />.
+        short reply never uses. vLLM's PagedAttention <Cite k="paged" /> stores the cache in small fixed-size blocks, handed
+        out as a sequence grows and taken back the moment it finishes. minitorch's <b>block manager</b> keeps the same books:
+        it counts each sequence's blocks and decides which requests run. The memory itself stays one array per cache.
       </p>
       <p>
         The second idea is <b>continuous batching</b> <Cite k="orca" />. A plain batch of requests runs until its longest
         reply finishes, while finished requests sit idle. minitorch's scheduler instead admits new requests between any two
-        generation steps and lets each one leave as soon as it is done. If the cache runs out of blocks, the scheduler{" "}
-        <b>preempts</b> the newest request. That request gives back its blocks, waits, and later rebuilds its cache from its
-        prompt plus the tokens it had already produced.
+        generation steps, runs every admitted request through each step together, and lets each one leave as soon as it is
+        done. If the cache runs out of blocks, the scheduler <b>preempts</b> the newest request. That request gives back its
+        blocks, waits, and later rebuilds its cache from its prompt plus the tokens it had already produced.
+      </p>
+      <p>
+        Running several conversations through one step needs their caches to line up, and each conversation's cache has its
+        own length. The runner pads each cache on the left to the longest and masks the padding out of attention. Each new
+        token keeps the position it holds in its own conversation, so RoPE sees the distances it would see alone. While the
+        same requests keep running, the padded caches stay together and grow by one position per step. When a request joins
+        or leaves, the runner splits them apart and pads the new set, copying every cache; an attention kernel that read each
+        sequence's keys and values through its own list of blocks would skip the copy. The padding also takes memory the block
+        manager never counts: a short conversation beside a long one holds as many positions as the long one.
       </p>
       {s && (
         <p>
           <code>tests/serve.py</code> checks the scheduler with greedy decoding, where each request must receive the same
           tokens it gets when it runs alone. Under each of {int(s.scenarios.length)} loads{" "}
           {s.scenarios.every((x) => x.identical) ? "every request does" : "some requests do not"}
-          {tight ? `, including a run with ${int(tight.preemptions)} preemptions when the whole cache holds only ${int(tight.num_blocks)} blocks` : ""} (Table
-          A2 in the appendix).
+          {tight ? `, including a run with ${int(tight.preemptions)} preemptions when the whole cache holds only ${int(tight.num_blocks)} blocks` : ""} (<Res f="serve_cpu.json" />).
         </p>
       )}
       <p>
         In Figure 12 the engine serves Qwen3. Messages go through an endpoint shaped like OpenAI's chat API into the
         scheduler and engine, and Qwen3 runs in minitorch on the Apple GPU in bfloat16. Thinking mode is off, so it answers
-        without a reasoning preamble. Open this page twice and send from both, and the engine interleaves the two
-        conversations step by step.
+        without a reasoning preamble.
       </p>
-      <Fig n={12} caption="Chat with Qwen3-0.6B, live. The reply streams in token by token; the line under it gives the time to the first token and the speed after it.">
+      <Fig n={12} caption="Chat with Qwen3-0.6B, live. The reply streams in token by token; the line under it gives the time to the first token and the speed after it. Open this page twice and send from both, and the engine runs the two conversations through the same decode steps.">
         <Chat />
       </Fig>
-      <p>
-        The two conversations take turns. The scheduler runs the model on one sequence per step, because each sequence's
-        cache has a different length, and running several in one step needs an attention kernel that reads each sequence's
-        keys and values through its own list of blocks. Even alone, a reply streams no faster than one decode step allows.
-      </p>
+      {sb && alone && perSeq && batched && (
+        <p>
+          A step for several conversations costs little more than a step for one. Each decode step pays for reading every
+          weight from memory and for launching hundreds of small kernels (§6), and neither cost grows with the number of rows.
+          With {most} chats arriving at once, each writing {int(sb.new_tokens)} tokens, one forward pass per conversation
+          produces {num(perSeq.tokens_per_s, 3)} tokens per second in all, about what one chat gets alone
+          ({num(alone.tokens_per_s, 3)}). One pass per step produces {num(batched.tokens_per_s, 3)},{" "}
+          {num(batched.tokens_per_s / perSeq.tokens_per_s, 2)}x as many, while the step grows from{" "}
+          {num(alone.decode_step_ms, 3)} ms to {num(batched.decode_step_ms, 3)} ms. In float32,{" "}
+          {sb.float32_identical_replies === sb.float32_requests ? `all ${sb.float32_requests}` : `${sb.float32_identical_replies} of ${sb.float32_requests}`}{" "}
+          batched replies match the one-at-a-time replies token for token. In bfloat16, {batched.identical_replies} of {most}{" "}
+          do, since a masked batch skips the fused attention kernel and rounds differently, and one flipped near-tie changes
+          the rest of a reply (<Res f="serve_batch_metal.json" />). Batching raises the total, and each reply still streams
+          no faster than one decode step allows.
+        </p>
+      )}
     </Section>
   );
 }

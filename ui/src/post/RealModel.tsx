@@ -1,5 +1,5 @@
 import { RunCurve } from "../figures/RunCurve";
-import { Aside, chance, Cite, Fig, Section, TeX, int, mean, median, num, pct, sci, useResults, type Gsm8k, type GrpoRow, type Speculative } from "./kit";
+import { Aside, chance, Cite, Fig, Res, Section, TeX, int, mean, median, num, pct, sci, useResults, type Gsm8k, type GrpoRow, type Speculative } from "./kit";
 
 export function Qwen() {
   const r = useResults();
@@ -84,7 +84,7 @@ export function Quantization() {
           a decode step goes only from {num(row("bfloat16")!.decode_ms_per_token, 3)} ms to {num(row("int4")!.decode_ms_per_token, 3)} ms.
           Reading the bfloat16 weights takes {num(row("bfloat16")!.weight_mb / qt.bandwidth_gb_s!, 3)} ms of the step at the
           measured bandwidth; the rest is hundreds of small operations, each paying a kernel launch (§6), and quantizing leaves
-          those as they were (Tables A8 and A9).
+          those as they were (<Res f="quant.json" />).
         </p>
       )}
       {r.spec && <SpeculativeFindings spec={r.spec} layers={Number(r.qwen?.config.n_layers)} />}
@@ -138,15 +138,18 @@ export function Lora() {
         a worked solution ending in <code>#### answer</code>. The model trains on the {int(run?.config.examples as number)}{" "}
         training problems, learning to produce the solutions while the loss ignores the question. I fixed the evaluation
         protocol before training: the first {int(base?.n)} test problems, the same prompt asking for the answer after{" "}
-        <code>####</code>, greedy decoding with thinking mode off, at most 320 new tokens, and a problem counts as solved when
-        the final number equals the reference.
+        <code>####</code>, greedy decoding with thinking mode off, and at most 320 new tokens. A problem counts as solved when
+        its final number equals the reference. The final number is the one after the first <code>####</code>, else the one in
+        the first <code>{String.raw`\boxed{}`}</code>, else the reply's last number. I take the first match because a reply
+        that runs to the limit often repeats its boxed answer and gets cut off inside the last box, as in{" "}
+        <code>{String.raw`\boxed{70000} ... \boxed{7`}</code>.
       </p>
       {r.ckC && fullOn && bestOff && (
         <p>
           Training keeps every activation until backward has used it. <b>Activation checkpointing</b> <Cite k="checkpoint" />{" "}
           keeps only each block's input and recomputes the rest during backward, which fits a batch of {int(r.ckC.examples)}{" "}
           examples into {num(fullOn.peak_gb, 3)} GB on the 3090; without it the most that fits is {bestOff.micro} per pass, at{" "}
-          {num(bestOff.peak_gb, 3)} GB (appendix, Activation checkpointing).
+          {num(bestOff.peak_gb, 3)} GB (<Res f="checkpointing_cuda.json" />).
         </p>
       )}
       {base ? (
@@ -283,7 +286,7 @@ export function Grpo() {
         of the GPU idle (§6). Sampling all {int(many?.rows)} replies in one batch fills it. On the 3090 a decode step takes{" "}
         {num(one?.decode_ms_per_step, 3)} ms for one reply and {num(many?.decode_ms_per_step, 3)} ms for {int(many?.rows)}, so the
         batch writes {one && many ? (many.tokens_per_s / one.tokens_per_s).toFixed(0) : "…"} times as many tokens per second
-        (Table A7). Prompts of different lengths share the batch by padding on the left, with the padding masked out of
+        (<Res f="rollout_cuda.json" />). Prompts of different lengths share the batch by padding on the left, with the padding masked out of
         attention (<code>tests/grpo.py</code>). The first version still crawled. It copied all {int(many?.rows)} rows of logits,{" "}
         {int(Number(r.qwen?.config.vocab_size))} numbers each, to the CPU to draw the tokens, which took{" "}
         {num(ro?.step_ms_64_rows.sample_on_host, 3)} ms per step against the model's {num(ro?.step_ms_64_rows.model, 3)} ms;
@@ -359,87 +362,6 @@ export function Grpo() {
   );
 }
 
-/** §10's measurements in full, for the appendix. */
-export function DecodingAppendix() {
-  const r = useResults();
-  const qt = r.quant;
-  const row = (p: string) => qt?.rows.find((x) => x.precision === p);
-  return (
-    <>
-      {qt && (
-        <Fig n="A8" table caption={<>Qwen3-0.6B on the Apple GPU at three precisions (§10). Perplexity comes from {int(qt.tokens_per_text)} tokens of each held-out text, GSM8K's worked solutions and TinyStories stories; lower is better. "Ceiling" is the measured memory bandwidth, {num(qt.bandwidth_gb_s, 3)} GB/s, divided by the bytes of weights read per token.</>}>
-          <table className="results">
-            <thead><tr><th>Weights</th><th className="num">MB read per token</th><th className="num">Perplexity, math</th><th className="num">Perplexity, stories</th><th className="num">Tokens / s</th><th className="num">Ceiling</th></tr></thead>
-            <tbody>
-              {qt.rows.map((x) => (
-                <tr key={x.precision}>
-                  <th>{x.precision}</th><td className="num">{int(x.weight_mb)}</td><td className="num">{num(x.perplexity.gsm8k, 4)}</td>
-                  <td className="num">{num(x.perplexity.tinystories, 4)}</td><td className="num">{num(x.decode_tokens_per_s, 3)}</td><td className="num">{num(x.ceiling_tokens_per_s, 3)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Fig>
-      )}
-      {qt && row("bfloat16") && row("int8") && (
-        <p>
-          One result is unexplained: int8 makes the decode step slower, {num(row("int8")!.decode_ms_per_token, 3)} ms against
-          bfloat16's {num(row("bfloat16")!.decode_ms_per_token, 3)}, although its matrix multiplications run faster in isolation.
-          Swapping in MLX's own quantized kernel gives {num(row("int8")!.decode_ms_per_token_mlx_kernel, 3)} ms, so the cause is
-          not minitorch's kernel; finding it needs a profile of the whole step on the GPU.
-        </p>
-      )}
-      {qt?.kernels && (
-        <Fig n="A9" table wide caption={<>One token's matrix multiplication for three of Qwen3's matrices on the Apple GPU: the time, and under it the memory bandwidth it reaches. MLX's quantized kernel is the reference; the measured peak bandwidth is {num(qt.bandwidth_gb_s, 3)} GB/s.</>}>
-          <KernelTable kernels={qt.kernels} />
-        </Fig>
-      )}
-      {r.spec && <SpeculativeTable spec={r.spec} />}
-    </>
-  );
-}
-
-/** One row per matrix, one column per implementation: microseconds, with the bandwidth that implies under it. */
-function KernelTable({ kernels }: { kernels: { matrix: string; impl: string; us: number; gb_s: number }[] }) {
-  const impls = [...new Set(kernels.map((k) => k.impl))];
-  const matrices = [...new Set(kernels.map((k) => k.matrix))];
-  return (
-    <table className="results">
-      <thead><tr><th>Matrix</th>{impls.map((i) => <th key={i} className="num">{i}</th>)}</tr></thead>
-      <tbody>
-        {matrices.map((m) => (
-          <tr key={m}>
-            <th>{m}</th>
-            {impls.map((i) => {
-              const k = kernels.find((x) => x.matrix === m && x.impl === i);
-              return <td key={i} className="num">{k ? <>{num(k.us, 4)} µs<small>{num(k.gb_s, 3)} GB/s</small></> : "-"}</td>;
-            })}
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-}
-
-function SpeculativeTable({ spec }: { spec: Speculative }) {
-  return (
-    <Fig n="A10" table caption={<>Speculative decoding (§10): greedy decoding on the Apple GPU in bfloat16, 128 tokens for each of four GSM8K prompts, from <code>bench/speculative.py</code>. Speedup is against Qwen3-1.7B alone; "kept" is the share of draft tokens the target accepted.</>}>
-      <table className="results">
-        <thead><tr><th>Decoding</th><th className="num">Tokens / s</th><th className="num">Speedup</th><th className="num">Kept</th></tr></thead>
-        <tbody>
-          {spec.rows.map((x) => (
-            <tr key={x.method + x.k}>
-              <th>{x.method === "speculative" ? `0.6B drafts ${x.k} for 1.7B` : x.method}</th>
-              <td className="num">{num(x.tokens_per_s, 3)}</td><td className="num">{x.speedup.toFixed(2)}x</td>
-              <td className="num">{x.acceptance === undefined ? "" : pct(x.acceptance, 0)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </Fig>
-  );
-}
-
 function SpeculativeFindings({ spec, layers }: { spec: Speculative; layers: number }) {
   const target = spec.rows.find((x) => x.method === "Qwen3-1.7B alone")!;
   const draft = spec.rows.find((x) => x.method === "Qwen3-0.6B alone")!;
@@ -454,7 +376,7 @@ function SpeculativeFindings({ spec, layers }: { spec: Speculative; layers: numb
       the guesses it agrees with by a rule that leaves its output distributed exactly as before (<code>tests/speculative.py</code>).
       With Qwen3-0.6B drafting for Qwen3-1.7B, the target kept {pct(runs[0].acceptance!, 0)} of single guesses
       {exact ? " and every output matched the 1.7B's own text token for token" : ""}, yet the best speedup was{" "}
-      {num(best.speedup, 3)}x, at {best.k} {best.k === 1 ? "guess" : "guesses"} per pass (Table A10). The draft costs too much: a 0.6B decode step takes{" "}
+      {num(best.speedup, 3)}x, at {best.k} {best.k === 1 ? "guess" : "guesses"} per pass (<Res f="speculative_metal.json" />). The draft costs too much: a 0.6B decode step takes{" "}
       {pct(cost, 0)} of a 1.7B step, because both models have {int(layers)} layers, launch the same number of kernels, and
       pay §6's launch cost for each.
     </p>

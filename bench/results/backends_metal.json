@@ -2,8 +2,8 @@
  "device": "metal",
  "failed": [],
  "ops": {
-  "agree": 51,
-  "total": 51
+  "agree": 52,
+  "total": 52
  },
  "training": {
   "steps": 20,

@@ -31,8 +31,7 @@ class Linear(Module):
         ) if bias else None
 
     def forward(self, x):
-        assert x.data.shape[-1] == self.weight.data.shape[0], \
-            f"Linear expects last dim {self.weight.data.shape[0]}, got {x.data.shape[-1]}"
+        assert x.shape[-1] == self.weight.shape[0], f"Linear expects last dim {self.weight.shape[0]}, got {x.shape[-1]}"
         # (..., in) -> (rows, in): one GEMM, and a weight grad without a (batch, in, out) stack to sum
         rows = x.reshape(-1, x.shape[-1])
         if T._autocast is None:
@@ -88,8 +87,7 @@ class LayerNorm(Module):
         self.eps = eps
 
     def forward(self, x):
-        assert x.data.shape[-1] == self.gamma.data.size, \
-            f"LayerNorm expects last dim {self.gamma.data.size}, got {x.data.shape[-1]}"
+        assert x.shape[-1] == self.gamma.shape[0], f"LayerNorm expects last dim {self.gamma.shape[0]}, got {x.shape[-1]}"
         mean = x.mean(axis=-1, keepdims=True)
         diff = x - mean
         var = (diff ** 2).mean(axis=-1, keepdims=True)
@@ -164,8 +162,8 @@ class BatchNorm1d(Module):
         self.running_var = np.ones(num_features, dtype=np.float32)
 
     def forward(self, x):
-        assert x.data.ndim == 2 and x.data.shape[1] == self.gamma.data.size, \
-            f"Expected input shape (batch, {self.gamma.data.size}), got {x.data.shape}"
+        assert x.ndim == 2 and x.shape[1] == self.gamma.shape[0], \
+            f"Expected input shape (batch, {self.gamma.shape[0]}), got {x.shape}"
 
         if self._training:
             mean = x.mean(axis=0, keepdims=True)

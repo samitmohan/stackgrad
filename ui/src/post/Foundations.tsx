@@ -2,12 +2,11 @@ import { AutogradGraph } from "../figures/AutogradGraph";
 import { ParityChart } from "../figures/BenchCharts";
 import { GradChecks } from "../figures/GradChecks";
 import { useState } from "react";
-import { Aside, Cite, Fig, Section, TeX, int, num, pct, pval, sci, useResults , type Lazy } from "./kit";
+import { Aside, Cite, Fig, Section, TeX, int, num, sci, useResults , type Lazy } from "./kit";
 
 export function Intro() {
   const r = useResults();
   const lines = (name: string) => int(r.lines?.groups.find((g) => g.name === name)?.lines);
-  const fa = (impl: string) => r.fa2?.rows.find((x) => x.shape === "CS336 training" && x.impl === impl)?.forward_backward_ms;
   return (
     <Section id="intro" n={1} title="Introduction">
       <p>
@@ -37,36 +36,10 @@ export function Intro() {
           its tests, benchmarks, and this page, is {int(r.lines.repository)} (<code>scripts/lines.py</code>).
         </p>
       )}
-      <p>The results, in the order the sections reach them:</p>
-      <ul>
-        <li>
-          The gradients match PyTorch's to {sci(r.p64?.rows[0].abs_diff)}, and a{" "}
-          {r.tsParams ? `${(r.tsParams / 1e6).toFixed(1)}M` : "…"}-parameter model trains on TinyStories to a validation loss of{" "}
-          {num(r.finalVal)} in {num(r.minutes, 2)} minutes on one RTX 3090 (§2, §5).
-        </li>
-        <li>
-          A hand-written Metal attention kernel runs {num(r.kernelWin, 2)}x faster than MLX's own at the training shape, and
-          FlashAttention-2 written in Triton runs {num(fa("composed") && fa("Triton") && fa("composed")! / fa("Triton")!, 2)}x
-          faster than the composed version (§7).
-        </li>
-        <li>Qwen3-0.6B's logits match Hugging Face's to {sci(r.qwenCpu?.max_gap)}, and minitorch serves it behind an OpenAI-style endpoint (§8, §9).</li>
-        {r.vsLora && r.vsGrpo && r.vsAgent && (
-          <li>
-            Fine-tuning with LoRA, reinforcement learning with GRPO, and a calculator tool all fail to make it better at
-            grade-school math ({pval(r.vsLora.p_value)}, {pval(r.vsGrpo.p_value)}, {pval(r.vsAgent.p_value)}; §11 to §13).
-          </li>
-        )}
-        {r.rag && (
-          <li>
-            Retrieval puts the right Wikipedia paragraph among the top three for {pct(r.rag.recall_at_3, 1)} of questions, and{" "}
-            {pct(r.rag.rag_contains, 0)} of answers then contain the reference (§13).
-          </li>
-        )}
-      </ul>
       <p>
         You do not need to know any machine learning to follow along. Each section explains its idea from scratch before
-        minitorch implements it. The figures read the project's result files, and several run the engine on the server when
-        you click.
+        minitorch implements it. The figures read the project's result files, and several show what the engine on the server
+        returns when you click.
       </p>
     </Section>
   );
@@ -175,8 +148,8 @@ export function Autograd() {
       <TeX block>{String.raw`\frac{\partial f}{\partial x} \;\approx\; \frac{f(x + h) - f(x - h)}{2h}, \qquad h = 10^{-5}`}</TeX>
       <p>
         The check is slow, since it reruns the function twice per input, but it needs no calculus and no trust. minitorch
-        compares it with backward's result for {int(r.bkM?.ops.total)} operations and layers, and the button below runs all of
-        them on the server.
+        compares it with backward's result for {int(r.bkM?.ops.total)} operations and layers, and Figure 3 shows a run of all
+        of them on the server.
       </p>
       <Fig n={3} caption="Finite-difference gradient checks, run live. Each line is one operation or layer; it passes when the gradient from backward() agrees with the measured slope for every input.">
         <GradChecks />

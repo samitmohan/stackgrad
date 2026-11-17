@@ -66,10 +66,10 @@ def main():
     p.add_argument("--rank", type=int, default=16)
     p.add_argument("--alpha", type=float, default=32)
     p.add_argument("--batch", type=int, default=8)
-    # shortcut: every intermediate stays alive for backward. Measured peak on the 3090, including 3.4 GB of other processes:
-    # 10.9 GB at 1 example per pass, 17.9 GB at 2, 22.8 GB at 4, out of memory at 8. Recomputing each block in backward
-    # (activation checkpointing) would allow whole-batch passes
+    # the defaults are runs/lora_gsm8k's. On the 3090 (bench/results/checkpointing_cuda.json) they peak at 10.0 GB and take
+    # 0.79 s per batch of 8. --micro 4 takes 0.40 s at 15.2 GB; --checkpoint --micro 8 takes 0.42 s at 5.2 GB
     p.add_argument("--micro", type=int, default=2, help="examples per forward pass; their gradients add up to the batch's")
+    p.add_argument("--checkpoint", action="store_true", help="recompute each block in backward instead of storing its activations")
     p.add_argument("--epochs", type=int, default=1)
     p.add_argument("--steps", type=int, default=None, help="stop early, for a smoke test")
     p.add_argument("--lr", type=float, default=2e-4)
@@ -88,6 +88,7 @@ def main():
 
     model = load_qwen3(args.model).to(args.device)
     apply_lora(model, args.rank, args.alpha)
+    model.checkpoint_blocks = args.checkpoint
     params = model.parameters()
     opt = AdamW(params, lr=args.lr, weight_decay=0.0)
     pad = tok.ids[b"<|endoftext|>"]

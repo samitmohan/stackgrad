@@ -32,6 +32,7 @@ EOT = "<|endoftext|>"
 
 def get_batch(data, batch_size, context):
     """Random windows of `context` tokens; targets are the inputs shifted by one."""
+    # shortcut: the data's last token is never a target; fixing it redraws the batches behind every published run
     starts = np.random.randint(0, len(data) - context - 1, size=batch_size)
     x = np.stack([data[s:s + context] for s in starts]).astype(np.int64)
     y = np.stack([data[s + 1:s + context + 1] for s in starts]).astype(np.int64)

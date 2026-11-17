@@ -39,7 +39,8 @@ test("benchmark figures and result tables render from the result files", async (
   await expect(page.getByLabel("Attention kernels").getByRole("columnheader", { name: "v3 simdgroup matmul" })).toBeVisible();
   await expect(page.locator(".katex").first()).toBeVisible();
   await expect(page.locator("#table-4")).toContainText("CPU (NumPy), float32");
-  await expect(page.locator("#table-A1")).toContainText("Gradient checks that agree");
+  await expect(page.locator("#table-A1")).toContainText("GPT-2");
+  await expect(page.locator("#table-A1")).toContainText("identical");  // greedy text, from gpt2_parity.json
   await expect(page.locator("#figure-7 > figcaption")).toContainText("ends at a validation loss of", { timeout: 30_000 });
 });
 

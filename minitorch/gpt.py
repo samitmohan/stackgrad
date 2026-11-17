@@ -115,8 +115,8 @@ class TransformerLM(Module):
         """Extend int array idx (B, T0) by up to max_new_tokens, stopping once every row has emitted eos_id.
 
         Prompts of different lengths share a batch left-padded: pad (B,) counts each row's
-        padding, which attention hides. RoPE scores depend only on the distance between two
-        positions, so shifting a prompt right changes nothing it computes.
+        padding, which attention hides, and each row's tokens keep the positions they would have
+        alone, so RoPE sees the same distances.
         """
         idx = np.asarray(idx)
         assert idx.shape[1] + max_new_tokens <= self.context_length, "prompt + new tokens exceed context_length"

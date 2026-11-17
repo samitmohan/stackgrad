@@ -2,7 +2,7 @@ import { AttentionHeads } from "../figures/AttentionHeads";
 import { BpeTrace } from "../figures/BpeTrace";
 import { Generate } from "../figures/Generate";
 import { RunCurve } from "../figures/RunCurve";
-import { Aside, Cite, Fig, Section, TeX, int, num, useResults } from "./kit";
+import { Aside, Cite, Fig, Res, Section, TeX, int, num, useResults } from "./kit";
 
 export function Tokens() {
   const r = useResults();
@@ -61,7 +61,7 @@ export function Tokens() {
       )}
       <p>
         An average token covers {num(b?.train_bytes_per_token as number, 3)} bytes of text, so the model reads about a
-        quarter as many tokens as there are characters. Try it on your own text.
+        quarter as many tokens as there are characters. Figure 5 shows the merges on real text.
       </p>
       <Fig n={5} caption="The tokenizer, live. Type any text and press Tokenize. Each box is one token with its id. Then pick a word below to watch its bytes merge, step by step, into the final tokens.">
         <BpeTrace />
@@ -127,7 +127,7 @@ export function Model() {
         sentence. A few have a habit you can spot. The figure opens on layer 3, head 11, where words inside a phrase look
         back to the verb or preposition that introduces it: <i>little</i>, <i>girl</i>, and the first <i>Lily</i> look at{" "}
         <i>was</i>, and <i>red</i> and <i>ball</i> look at <i>with</i>. Layer 1, head 15 parks much of its weight on the first
-        token, a resting place for a head when nothing earlier matters. Type a sentence of your own to see the patterns move.
+        token, a resting place for a head when nothing earlier matters. Change the sentence to see the patterns move.
       </p>
       <Fig n={6} caption="Attention patterns of the trained story model, live. Rows are its layers and columns its heads; click a thumbnail to enlarge it. In the enlarged view each row is a token looking back at the tokens before it, and darker cells carry more weight (on a square-root scale, so faint patterns stay visible).">
         <AttentionHeads />
@@ -252,7 +252,7 @@ export function Training() {
         <b>Temperature</b> and <b>top-p</b> control how the next token is drawn. Temperature divides the logits before the
         softmax: below 1 it sharpens the distribution toward the likeliest token, above 1 it flattens it, and 0 means always
         take the likeliest. Top-p keeps the smallest set of likeliest tokens whose probabilities add up to p, which cuts off
-        the long tail of unlikely tokens. Try both on any checkpoint.
+        the long tail of unlikely tokens. Figure 8 samples stories at different temperatures.
       </p>
       <Fig n={8} caption="Generate from a trained checkpoint, live. The server runs minitorch's model with a key-value cache (§9) on the CPU; generated text follows the prompt in plain type.">
         <Generate />
@@ -263,7 +263,7 @@ export function Training() {
           <p>
             §4 built the model from parts that recent transformers share: RMSNorm before each sublayer, RoPE for position, and
             SwiGLU in the feed-forward layer. CS336's ablations take each one out and train again. Every variant below trains the
-            story model for {int(base.steps)} steps, a quarter of the full run, with everything else unchanged (Table A5).
+            story model for {int(base.steps)} steps, a quarter of the full run, with everything else unchanged (<Res f="ablations.json" />).
           </p>
           <p>
             The model as built ends at a validation loss of {num(base.final_val_loss ?? undefined)}. Moving RMSNorm after each

@@ -20,10 +20,12 @@ The cpu side of part 1 runs in float64 (test_grads makes float64 inputs), so it
 measures each backend's float32 error against near-exact values.
 """
 import argparse
+import gzip
 import json
 import sys
 import threading
 import traceback
+import urllib.request
 from pathlib import Path
 
 import numpy as np
@@ -258,15 +260,26 @@ def check_thread(device):
     return [] if ok else ["thread"]
 
 
+def mnist(n):
+    """MNIST's first n training images (n, 784) and labels, downloaded once into data/mnist/."""
+    arrays = []
+    for name, header in [("train-images-idx3-ubyte.gz", 16), ("train-labels-idx1-ubyte.gz", 8)]:
+        path = Path(__file__).resolve().parent.parent / "data" / "mnist" / name
+        if not path.exists():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            urllib.request.urlretrieve(f"https://storage.googleapis.com/cvdf-datasets/mnist/{name}", path)
+        arrays.append(np.frombuffer(gzip.decompress(path.read_bytes()), np.uint8, offset=header))
+    return arrays[0].reshape(-1, 784)[:n], arrays[1][:n]
+
+
 def check_mnist(device, steps=100):
     try:
-        from sklearn.datasets import fetch_openml
-        mnist = fetch_openml("mnist_784", version=1, as_frame=False, parser="liac-arff")
-    except (ImportError, OSError) as e:
+        images, labels = mnist(10_000)
+    except OSError as e:
         print(f"MNIST: skipped ({type(e).__name__}: {e})")
         return []
 
-    X, y = mnist.data[:10_000].astype(np.float32) / 255.0, one_hot(mnist.target[:10_000].astype(np.int64))
+    X, y = images.astype(np.float32) / 255.0, one_hot(labels.astype(np.int64))
     np.random.seed(0)
     models = {"cpu": build_mlp(), device: build_mlp()}
     models[device].load_state_dict(models["cpu"].state_dict())

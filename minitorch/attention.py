@@ -10,12 +10,14 @@ from .tensor import _apply, cat
 def apply_rope(x, start, theta):
     """Rotate each (x[i], x[i + D/2]) pair by an angle set by its position.
 
-    x: (B, H, T, D), holding positions start .. start+T-1. Uses the half-split
-    layout of Llama and Qwen, so pretrained checkpoints load without permuting.
+    x: (B, H, T, D), holding positions start .. start+T-1; start is one int, or one per row (B,)
+    when the rows of a batch sit at different positions. Uses the half-split layout of Llama
+    and Qwen, so pretrained checkpoints load without permuting.
     """
     half = x.shape[-1] // 2
     freqs = theta ** (-np.arange(half) / half)
-    angles = np.outer(np.arange(start, start + x.shape[2]), freqs)
+    positions = np.reshape(start, (-1, 1, 1)) + np.arange(x.shape[2])[:, None]  # (B or 1, T, 1)
+    angles = (positions * freqs)[:, None]                                       # (B or 1, 1, T, D/2)
     cos, sin = np.cos(angles).astype(np.float32), np.sin(angles).astype(np.float32)
     x1, x2 = x[..., :half], x[..., half:]
     return cat([x1 * cos - x2 * sin, x2 * cos + x1 * sin], axis=-1)
@@ -79,6 +81,8 @@ class Attention(Module):
         B, T, _ = x.shape
         D = self.head_dim
         start = 0 if cache is None else len(cache)
+        if pad is not None:
+            start = start - np.asarray(pad)  # each row's first real token sits at position 0, after its left padding
         q = self.q_proj(x).reshape(B, T, self.n_heads, D)
         k = self.k_proj(x).reshape(B, T, self.n_kv_heads, D)
         if self.q_norm is not None:

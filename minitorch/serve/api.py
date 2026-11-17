@@ -32,7 +32,7 @@ IDLE_S = 120  # seconds without a new metrics line before a run counts as finish
 MAX_PROMPT_CHARS = 64_000  # far past what a 4k-token context holds
 EOT = "<|endoftext|>"
 app = FastAPI(title="minitorch")
-# no_grad flips one process-wide flag, so requests that run a model must not overlap
+# one model call at a time: the endpoints and the chat engine's thread share the loaded models and the device's memory
 _model_lock = threading.Lock()
 
 

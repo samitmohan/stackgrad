@@ -1,6 +1,7 @@
 """GRPO on GSM8K (CS336 assignment 5): Qwen3-0.6B learns from its own sampled solutions (SPEC.md).
 
-    CUPY_TF32=1 uv run --no-dev python train_grpo.py --run grpo_gsm8k --device cuda    # bqa3
+    CUPY_TF32=1 uv run --no-dev python train_grpo.py --run grpo_gsm8k --device cuda --steps 200    # bqa3
+    CUPY_TF32=1 uv run --no-dev python train_grpo.py --run grpo_no_stop --device cuda --reward answer --steps 140
     CUPY_TF32=1 uv run --no-dev python train_grpo.py --run grpo_smoke --device cuda --steps 2
 
 Each step samples --group replies to each of --questions training problems from the current
@@ -17,7 +18,7 @@ from pathlib import Path
 
 import numpy as np
 
-from bench.gsm8k import PROMPT, final_number
+from bench.gsm8k import PROMPT, final_number, gold_number, matches
 from minitorch import AdamW, clip_grad_norm
 from minitorch import functional as F
 from minitorch.lora import apply_lora, save_adapter
@@ -29,18 +30,17 @@ def load_questions(path):
     """(question, reference answer) for every problem in a GSM8K .jsonl file."""
     with open(path) as f:
         rows = [json.loads(line) for line in f]
-    return [(r["question"], float(r["answer"].split("####")[-1].strip().replace(",", ""))) for r in rows]
+    return [(r["question"], gold_number(r["answer"])) for r in rows]
 
 
-def reward(text, gold, stopped):
+def reward(text, gold, stopped, require_stop=True):
     """1 for a reply that stops on its own (emits <|im_end|>) with the right final number, else 0.
 
-    Stopping is part of the answer. A run that scored the final number alone (runs/grpo_no_stop)
-    learned by step 49 to never stop: every reply ran to the token limit, a correct answer
-    followed by "---" separators, because nothing cost it anything to keep writing.
+    Stopping is part of the answer. A run that scored the final number alone (require_stop=False,
+    --reward answer: runs/grpo_no_stop) learned by step 49 to never stop: every reply ran to the
+    token limit, a correct answer followed by "---" separators, because nothing cost it anything to keep writing.
     """
-    got = final_number(text)
-    return float(stopped and got is not None and abs(got - gold) < 1e-6)
+    return float((stopped or not require_stop) and matches(final_number(text), gold))
 
 
 def sample_replies(model, tok, questions, group, max_new, temperature, eos):
@@ -97,13 +97,16 @@ def main():
     p.add_argument("--group", type=int, default=8, help="replies sampled per problem")
     p.add_argument("--max-new", type=int, default=320, help="the evaluation's reply limit (bench/gsm8k.py)")
     p.add_argument("--temperature", type=float, default=1.0)
+    p.add_argument("--reward", default="finished", choices=["finished", "answer"],
+                   help="finished: the right number in a reply that stops; answer: the right number alone (runs/grpo_no_stop)")
     p.add_argument("--rank", type=int, default=16)
     p.add_argument("--alpha", type=float, default=32)
     # CS336's GRPO fine-tunes every weight at 1e-5; LoRA trains best near 10x the full fine-tuning rate
     # (Schulman et al., "LoRA Without Regret", Thinking Machines, 2025)
     p.add_argument("--lr", type=float, default=1e-4)
     # shortcut: one reply per pass. A reply runs to 320 tokens after a ~150-token prompt, and LoRA's update peaked at
-    # 17.9 GB on the 3090 for 2 shorter examples (train_lora.py), so 2 long replies may not fit; activation checkpointing would
+    # 17.9 GB on the 3090 for 2 shorter examples (train_lora.py), so 2 long replies may not fit. Checkpointing each block
+    # (minitorch.checkpoint) would fit more; measure before raising this
     p.add_argument("--micro", type=int, default=1, help="replies per forward pass in the update")
     p.add_argument("--clip", type=float, default=1.0)
     p.add_argument("--seed", type=int, default=0)
@@ -120,19 +123,21 @@ def main():
     params = model.parameters()
     opt = AdamW(params, lr=args.lr, betas=(0.9, 0.95), weight_decay=0.0)
     eos, pad = tok.ids[b"<|im_end|>"], tok.ids[b"<|endoftext|>"]
-    order = list(np.random.permutation(len(data)))
+    order = []
     print(f"{args.steps} steps of {args.questions} problems x {args.group} replies -> {out}", flush=True)
 
     start = time.time()
     with open(out / "metrics.jsonl", "w") as metrics, open(out / "samples.jsonl", "w") as samples:
         for step in range(1, args.steps + 1):
+            if len(order) < args.questions:  # a new epoch: 7,473 problems last 934 steps of 8
+                order = list(np.random.permutation(len(data)))
             questions = [data[order.pop()] for _ in range(args.questions)]
             t0 = time.perf_counter()
             prompts, replies = sample_replies(model, tok, questions, args.group, args.max_new, args.temperature, eos)
             t1 = time.perf_counter()
             texts = [tok.decode([t for t in r if t != eos]) for r in replies]
             golds = np.repeat([gold for _, gold in questions], args.group)
-            rewards = [reward(text, gold, stopped=r[-1] == eos) for text, gold, r in zip(texts, golds, replies)]
+            rewards = [reward(text, gold, r[-1] == eos, args.reward == "finished") for text, gold, r in zip(texts, golds, replies)]
             adv = group_advantages(rewards, args.group)
 
             # a reply with zero advantage adds nothing to the gradient, so the update skips it;
@@ -144,8 +149,10 @@ def main():
                 loss = policy_loss(model, [(prompts[i] + replies[i], len(prompts[i])) for i in chunk], adv[chunk], len(adv), pad, args.max_new)
                 loss.backward()
                 del loss  # drop this graph's saved activations before the next forward builds its own
-            grad_norm = clip_grad_norm(params, args.clip)
-            opt.step()
+            grad_norm = 0.0
+            if keep:  # every group scored alike: no gradient, so no step (Adam would still count one)
+                grad_norm = clip_grad_norm(params, args.clip)
+                opt.step()
             t2 = time.perf_counter()
 
             reply_tokens = sum(len(r) for r in replies)

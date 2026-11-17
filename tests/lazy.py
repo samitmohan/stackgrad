@@ -5,7 +5,8 @@ Every primitive's forward is wrapped to count its runs, then:
 - reading the result runs each op it needs exactly once, and a second read runs nothing;
 - an op nobody reads never runs;
 - replacing an input's .data after an op was written does not change that op's result;
-- comparisons and where() stay lazy too, and backward on a lazy loss gives the eager gradients.
+- comparisons and where() stay lazy too, and backward on a lazy loss gives the eager gradients;
+- a whole TransformerLM forward runs nothing: no layer reads .data to check a shape.
 
     uv run python tests/lazy.py
 """
@@ -14,7 +15,7 @@ import sys
 
 import numpy as np
 
-from minitorch import mlops
+from minitorch import TransformerLM, mlops
 from minitorch.tensor import Tensor, where
 
 RAN = []
@@ -74,6 +75,11 @@ loss = (where(x > 0, x, 0.0) * x).sum()
 check(RAN == [], "a loss is recorded, not run")
 loss.backward()
 check(np.allclose(x.grad, np.where(x.data > 0, 2 * x.data, 0.0)), "backward on a lazy loss runs it and gives d/dx of relu(x) * x")
+
+model = TransformerLM(97, 16, 32, 2, 4, 64)
+RAN.clear()
+logits = model(rng.integers(0, 97, (2, 16)))
+check(RAN == [] and logits.shape == (2, 16, 97), f"a TransformerLM forward runs nothing until read: {RAN[:5]}")
 
 print(f"\n{'all lazy checks passed' if failures == 0 else f'{failures} lazy checks failed'}")
 sys.exit(1 if failures else 0)

@@ -3,7 +3,6 @@ import { api, streamMetrics, type Run } from "../api";
 import type { MetricRow } from "../lib";
 import type { GrpoRow } from "./kit";
 import { Appendix } from "./Appendix";
-import { Conclusion } from "./Conclusion";
 import { Autograd, Intro } from "./Foundations";
 import { Head, Teaser, Tldr } from "./Head";
 import { ResultsContext } from "./kit";
@@ -59,7 +58,6 @@ export default function Post() {
           <Lora />
           <Grpo />
           <Tools />
-          <Conclusion />
           <Appendix />
         </div>
       </article>

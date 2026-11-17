@@ -33,6 +33,7 @@ export type Gpt2Parity = {
 export type Speculative = {
   rows: { method: string; k: number; tokens_per_s: number; speedup: number; acceptance?: number; first_diff_from_target?: (number | null)[] }[];
 };
+export type ServeBatch = { new_tokens: number; float32_identical_replies: number; float32_requests: number; rows: { mode: string; concurrent: number; seconds: number; tokens_per_s: number; decode_step_ms: number; identical_replies?: number }[] };
 export type Serve = { block_size: number; scenarios: { scenario: string; requests: number; num_blocks: number; max_batch: number; steps: number; preemptions: number; identical: boolean }[] };
 export type Gsm8k = { name: string; n: number; correct: number; accuracy: number; tokens_per_s: number; new_tokens: number; hit_token_limit: number; dtype: string };
 export type Quant = {
@@ -119,7 +120,7 @@ export function useResults() {
     const tsParams = cfg && cfg.vocab_size * cfg.d_model * 2 + cfg.layers * (4 * cfg.d_model ** 2 + 3 * cfg.d_model * cfg.d_ff + 2 * cfg.d_model) + cfg.d_model;
     return {
       p64: get<Parity>("m1_parity_f64"), p32: get<Parity>("m1_parity"), bpe: get<Record<string, number | boolean>>("bpe"),
-      ovM, ovC, attn, bkM, bkC, qwen, serve: get<Serve>("serve_cpu"), cfg, ts, lora, grpo, grpoNoStop, evals, sample, runs,
+      ovM, ovC, attn, bkM, bkC, qwen, serve: get<Serve>("serve_cpu"), serveBatch: get<ServeBatch>("serve_batch_metal"), cfg, ts, lora, grpo, grpoNoStop, evals, sample, runs,
       gsmBase: get<Gsm8k>("gsm8k_base"), gsmLora: get<Gsm8k>("gsm8k_lora_gsm8k"), gsmLora64: get<Gsm8k>("gsm8k_lora_gsm8k_f64"), gsmGrpo: get<Gsm8k>("gsm8k_grpo_gsm8k"), gsmNoStop: get<Gsm8k>("gsm8k_grpo_no_stop"),
       rollout: get<Rollout>("rollout_cuda"), gpt2: get<Gpt2Parity>("gpt2_parity"),
       spec: get<Speculative>("speculative_metal"),
@@ -209,6 +210,11 @@ export const REFS = [
   { k: "mlx", text: "A. Hannun, J. Digani, A. Katharopoulos, R. Collobert. MLX: Efficient and flexible machine learning on Apple silicon. 2023.", url: "https://github.com/ml-explore/mlx" },
   { k: "cupy", text: "R. Okuta et al. CuPy: A NumPy-Compatible Library for NVIDIA GPU Calculations. LearningSys 2017.", url: "https://github.com/cupy/cupy" },
 ] as const;
+
+/** A result file in minitorch's bench/results, the data behind a measurement the post states in one line. */
+export function Res({ f }: { f: string }) {
+  return <a href={`https://github.com/samitmohan/minitorch/blob/master/bench/results/${f}`}><code>{f}</code></a>;
+}
 
 export function Cite({ k }: { k: (typeof REFS)[number]["k"] }) {
   const i = REFS.findIndex((r) => r.k === k);

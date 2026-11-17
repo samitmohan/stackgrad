@@ -27,7 +27,7 @@ import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from bench.gsm8k import final_number
+from bench.gsm8k import final_number, gold_number, matches
 
 RESULTS = Path(__file__).resolve().parent.parent / "bench" / "results"
 TOOLS = [{"type": "function", "function": {
@@ -58,8 +58,10 @@ def calculate(expression):
         raise ValueError("only numbers and + - * / ** ( ) are allowed")
 
     try:
-        # GSM8K writes money and thousands as $1,250 and percents as 20%
-        result = value(ast.parse(expression.replace(",", "").replace("$", "").replace("%", "/100"), mode="eval").body)
+        # GSM8K writes money and thousands as $1,250 and percents as 20% or 20% of 40. shortcut: a bare percent is a number,
+        # so 80 + 150% is 81.5, never 80 raised by 150%; the model wrote that once in 250 problems (bench/results/gsm8k_agent_replies.jsonl)
+        text = expression.replace(",", "").replace("$", "").replace("%", "/100").replace("of", "*")
+        result = value(ast.parse(text, mode="eval").body)
         return str(round(result, 6)).removesuffix(".0")
     except (SyntaxError, ValueError, ZeroDivisionError, OverflowError, RecursionError, TypeError) as e:  # TypeError: (-8) ** 0.5
         return f"error: {e}"
@@ -113,9 +115,8 @@ def main():
     rows, start = [], time.time()
     for i, q in enumerate(problems):
         reply, trace = solve(functools.partial(chat, args.server), q["question"])
-        gold = float(q["answer"].split("####")[-1].strip().replace(",", ""))
-        got = final_number(reply)
-        rows.append({"i": i, "gold": gold, "got": got, "correct": got is not None and abs(got - gold) < 1e-6, "reply": reply, "trace": trace})
+        gold, got = gold_number(q["answer"]), final_number(reply)
+        rows.append({"i": i, "gold": gold, "got": got, "correct": matches(got, gold), "reply": reply, "trace": trace})
         if (i + 1) % 25 == 0:
             print(f"{i + 1:4d}/{len(problems)}  accuracy so far {sum(r['correct'] for r in rows) / (i + 1):.3f}", flush=True)
 

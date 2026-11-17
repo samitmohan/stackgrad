@@ -17,18 +17,21 @@
   explain each idea from first principles before using it. The prose passes the stop-slop
   rules (~/.claude/skills/stop-slop), and the design stays as plain as the reference: white
   page, one text column, light headings, centered captions, no decoration.
-  The post reads as a research paper (user, 2026-11-06): Abstract, numbered sections, a Conclusion with
-  limitations, References, Appendix. Its goal, stated in §1: a from-scratch PyTorch/tinygrad built in study-plan
-  order up to RAG and an agent on its own server, both live in §13; §14 is the conclusion, its opening paragraph only (user, 2026-11-06: related work and the
-  conclusion's subsections were cut; the acknowledgements are one line in the user's words). Section titles are the questions each section answers. GPT-2 and Stable Diffusion appear only in the
-  appendix (Other models), as tinygrad-style examples with a snippet; side results (quantization tables,
-  speculative decoding, scaling laws) go to the appendix with one sentence in the body.
+  The post reads as a research paper (user, 2026-11-06): an unlabeled abstract, numbered sections, References, Appendix.
+  It states each result once (user, portfolio commit 46aa1db, 2026-11-12): no "Abstract" label, no results list in §1,
+  and no Conclusion; §13 is the last section. Its goal, stated in §1: a from-scratch PyTorch/tinygrad built in study-plan
+  order up to RAG and an agent on its own server, both live in §13 (user, 2026-11-06: related work was cut; the
+  acknowledgements are one line in the user's words). Section titles are the questions each section answers. GPT-2 and Stable Diffusion appear only in the
+  appendix (Other models), as tinygrad-style examples with a snippet. The appendix holds the glossary, scaling laws, Other
+  models, and the reproduce commands; other side results (test tables, profiles, quantization, speculative decoding,
+  mixed precision, checkpointing) get one sentence in the body that links their file in bench/results (`<Res f=... />`).
 - The post also runs as a static page at samitmohan.in/blog/minitorch (user, 2026-11-06), titled "Modern AI: Autograd to Agents"
   and set in the site's type and colours (its own structure and prose kept). Its source is a port of ui/src in
   ../portfolio/web/src/paper/minitorch: sections render on the server, and the live figures replay recordings. With the
   server running, `uv run python scripts/record_replays.py` records them into bench/replays/; then
   `uv run python scripts/export_paper.py ../portfolio/web` copies the results and replays into the site. A prose change
-  here has to be made there too.
+  here has to be made there too: export_paper.py fails when any section's paragraphs differ between the two (captions,
+  figures, Head.tsx and kit.tsx may differ).
 - Every gradient lives in `minitorch/mlops.py`. Everything else composes those ops.
 - `TransformerLM(attn_res=True)` is Block Attention Residuals (DepthAttention in layers.py), an option only (user,
   2026-11-06): no retraining or measuring it. The paper's §5 says so in one paragraph and links the user's Attention

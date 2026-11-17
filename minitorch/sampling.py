@@ -19,13 +19,16 @@ def sample(logits, temperature=1.0, top_k=None, top_p=None):
     probs = np.exp(logits - logits.max(axis=-1, keepdims=True))
     probs /= probs.sum(axis=-1, keepdims=True)
     if top_p is not None:
-        order = np.argsort(-probs, axis=-1)
-        sorted_probs = np.take_along_axis(probs, order, axis=-1)
-        # drop a token once the likelier tokens before it already reach top_p
-        sorted_probs[np.cumsum(sorted_probs, axis=-1) - sorted_probs >= top_p] = 0.0
-        probs = np.zeros_like(probs)
-        np.put_along_axis(probs, order, sorted_probs, axis=-1)
-        probs /= probs.sum(axis=-1, keepdims=True)
+        kept = np.zeros_like(probs)
+        for row, out in zip(probs, kept):
+            # tokens below (1 - top_p) / V hold less than 1 - top_p together, so the ones above it already pass
+            # top_p and the nucleus never reaches below: sort those few, not all 151,936 of Qwen3's vocabulary
+            cand = np.flatnonzero(row >= (1 - top_p) / len(row))
+            cand = cand[np.argsort(-row[cand])]
+            # drop a token once the likelier tokens before it already reach top_p
+            keep = cand[np.cumsum(row[cand]) - row[cand] < top_p]
+            out[keep] = row[keep]
+        probs = kept / kept.sum(axis=-1, keepdims=True)
     return np.array([np.random.choice(len(p), p=p) for p in probs])
 
 
