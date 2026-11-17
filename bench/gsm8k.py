@@ -1,4 +1,4 @@
-"""GSM8K accuracy of Qwen3-0.6B running in minitorch: before and after LoRA (SPEC.md M3).
+"""GSM8K accuracy of Qwen3-0.6B running in stackgrad: before and after LoRA (SPEC.md M3).
 
     uv run python bench/gsm8k.py                                   # the base model
     uv run python bench/gsm8k.py --adapter runs/lora_gsm8k/adapter.npz
@@ -21,8 +21,8 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from minitorch.lora import merge_adapter
-from minitorch.qwen3 import chat_prompt, load_qwen3, load_tokenizer
+from stackgrad.lora import merge_adapter
+from stackgrad.qwen3 import chat_prompt, load_qwen3, load_tokenizer
 
 RESULTS = Path(__file__).resolve().parent / "results"
 PROMPT = "{question}\nSolve it step by step, then give the final answer on its own line as: #### <number>"

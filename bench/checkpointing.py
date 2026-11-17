@@ -17,8 +17,8 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from minitorch.lora import apply_lora
-from minitorch.qwen3 import load_qwen3, load_tokenizer
+from stackgrad.lora import apply_lora
+from stackgrad.qwen3 import load_qwen3, load_tokenizer
 from train_lora import examples, make_batch, reply_loss
 
 RESULTS = Path(__file__).resolve().parent / "results"

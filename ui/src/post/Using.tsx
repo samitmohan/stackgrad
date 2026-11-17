@@ -9,8 +9,8 @@ export function Tools() {
     <Section id="tools" n={13} title="Can it answer from documents and use a tool?">
       <p>
         Most systems built on language models do one of two things: answer from documents the model looks up, or let it call
-        tools. Here both run on minitorch end to end. They are programs that talk to the server of §9 through its chat
-        endpoint, the way an application uses any hosted model, and minitorch computes every number between the question and
+        tools. Here both run on stackgrad end to end. They are programs that talk to the server of §9 through its chat
+        endpoint, the way an application uses any hosted model, and stackgrad computes every number between the question and
         the answer, from the embedding to the last sampled token.
       </p>
       {g && (
@@ -25,7 +25,7 @@ export function Tools() {
           <p>
             Finding the right paragraph needs a way to compare meanings. An <b>embedding model</b> maps a text to a vector so
             that texts about the same thing point the same way. Qwen3-Embedding-0.6B <Cite k="qwen3emb" /> has Qwen3's
-            architecture with its own weights, so minitorch runs it with the code of §8, and its embedding of a text is the final
+            architecture with its own weights, so stackgrad runs it with the code of §8, and its embedding of a text is the final
             hidden state of the last token, scaled to length 1. The index is a NumPy matrix with one row per paragraph
             {g.index_seconds > 0 ? `, built once in ${num(g.index_seconds, 3)} s on the Apple GPU` : ""}. Embedding a question
             takes {num(g.query_embed_ms, 2)} ms, and the search is one matrix product with the index and a sort: the largest
@@ -50,7 +50,7 @@ top = np.argsort(-scores)[:3]                                   # the three near
             {num(g.rag_answer_s, 3)} s against {num(g.closed_answer_s, 2)} s. Figure 16 runs the whole pipeline on a question of
             your own.
           </p>
-          <Fig n={7} table caption={<>Qwen3-0.6B on {int(g.questions)} SQuAD v1.1 questions through minitorch's server on the Apple GPU, from <code>apps/rag.py</code>. Exact match and F1 follow SQuAD's rules; "contains" asks whether a reference answer appears in the reply as whole words.</>}>
+          <Fig n={7} table caption={<>Qwen3-0.6B on {int(g.questions)} SQuAD v1.1 questions through stackgrad's server on the Apple GPU, from <code>apps/rag.py</code>. Exact match and F1 follow SQuAD's rules; "contains" asks whether a reference answer appears in the reply as whole words.</>}>
             <table className="results">
               <thead><tr><th>Prompt</th><th className="num">Exact match</th><th className="num">F1</th><th className="num">Contains</th><th className="num">Seconds per answer</th></tr></thead>
               <tbody>
@@ -59,7 +59,7 @@ top = np.argsort(-scores)[:3]                                   # the three near
               </tbody>
             </table>
           </Fig>
-          <Fig n={16} caption={<>Retrieval, live, through minitorch's server: the question is embedded by Qwen3-Embedding-0.6B, compared with every one of SQuAD's {int(g.paragraphs)} development paragraphs, and Qwen3-0.6B answers from the three nearest. The first question loads both models, which takes a moment.</>}>
+          <Fig n={16} caption={<>Retrieval, live, through stackgrad's server: the question is embedded by Qwen3-Embedding-0.6B, compared with every one of SQuAD's {int(g.paragraphs)} development paragraphs, and Qwen3-0.6B answers from the three nearest. The first question loads both models, which takes a moment.</>}>
             <RagDemo />
           </Fig>
         </>
@@ -71,7 +71,7 @@ top = np.argsort(-scores)[:3]                                   # the three near
         JSON between <code>&lt;tool_call&gt;</code> tags. <code>apps/agent.py</code> gives it a calculator and runs the loop
         ReAct <Cite k="react" /> describes: when a reply calls the tool, the program evaluates the expression and sends the
         value back as a tool message, and the model continues, until it answers without a call. The expression comes from the model, so the calculator parses it and evaluates numbers
-        and arithmetic only, and never runs it as code (<code>tests/agent.py</code>). minitorch writes tools and tool results
+        and arithmetic only, and never runs it as code (<code>tests/agent.py</code>). stackgrad writes tools and tool results
         into the prompt exactly as Hugging Face's chat template does, which <code>tests/tokenizer.py</code> checks token for
         token.
       </p>
@@ -100,7 +100,7 @@ top = np.argsort(-scores)[:3]                                   # the three near
       ) : (
         <p className="pending">The second calculator run is under way; its numbers appear here when it finishes.</p>
       )}
-      <Fig n={17} caption={<>The agent, live: <code>apps/agent.py</code>'s loop on minitorch's server, with each model reply and each calculator call in order. It reproduces the second run's prompt, so expect the calls to come before the reasoning.</>}>
+      <Fig n={17} caption={<>The agent, live: <code>apps/agent.py</code>'s loop on stackgrad's server, with each model reply and each calculator call in order. It reproduces the second run's prompt, so expect the calls to come before the reasoning.</>}>
         <AgentDemo />
       </Fig>
     </Section>

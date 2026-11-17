@@ -15,7 +15,7 @@ export function Intro() {
         and it answers, and the steps between the bytes on disk and the words on screen stay out of sight.
       </p>
       <p>
-        minitorch rebuilds those parts in plain Python and checks each one against the library it imitates. I started where
+        stackgrad rebuilds those parts in plain Python and checks each one against the library it imitates. I started where
         Andrej Karpathy's micrograd <Cite k="micrograd" /> starts, with a single number that computes its own gradient, and
         took tinygrad's design <Cite k="tinygrad" />: a short list of basic operations with known gradients, and everything
         else composed from them.
@@ -38,7 +38,7 @@ export function Intro() {
       )}
       <p>
         You do not need to know any machine learning to follow along. Each section explains its idea from scratch before
-        minitorch implements it. The figures read the project's result files, and several show what the engine on the server
+        stackgrad implements it. The figures read the project's result files, and several show what the engine on the server
         returns when you click.
       </p>
     </Section>
@@ -85,7 +85,7 @@ export function Autograd() {
       </Aside>
       <p>
         With one weight you can work the gradient out by hand. With a billion weights in dozens of layers you need a program
-        that computes them all, and that program is the first part of minitorch.
+        that computes them all, and that program is the first part of stackgrad.
       </p>
       <h3>The chain rule as a program</h3>
       <p>
@@ -104,12 +104,12 @@ export function Autograd() {
         <b>reverse-mode</b> differentiation, also known as <b>backpropagation</b> <Cite k="backprop" />, and one backward pass
         costs about two forward passes for any number of weights.
       </p>
-      <Fig n={2} caption={<>The autograd engine, live. The server runs your expression through minitorch. The forward pass fills in each value (blue) and the backward pass each gradient (pink). At <TeX>{String.raw`x = 2,\; w = -0.5,\; b = 3`}</TeX> the chain rule gives <TeX>{String.raw`\partial/\partial x = -2`}</TeX> and <TeX>{String.raw`\partial/\partial w = 8`}</TeX>, the numbers on the graph. Edit the expression and run backward again.</>}>
+      <Fig n={2} caption={<>The autograd engine, live. The server runs your expression through stackgrad. The forward pass fills in each value (blue) and the backward pass each gradient (pink). At <TeX>{String.raw`x = 2,\; w = -0.5,\; b = 3`}</TeX> the chain rule gives <TeX>{String.raw`\partial/\partial x = -2`}</TeX> and <TeX>{String.raw`\partial/\partial w = 8`}</TeX>, the numbers on the graph. Edit the expression and run backward again.</>}>
         <AutogradGraph />
       </Fig>
       <h3>Nineteen operations with gradients</h3>
       <p>
-        A tensor in minitorch, an array of numbers with any number of dimensions, stores a reference to the operation that
+        A tensor in stackgrad, an array of numbers with any number of dimensions, stores a reference to the operation that
         produced it. An operation is a small class with two methods. <code>forward</code> computes the result from the raw arrays.{" "}
         <code>backward</code> receives the gradient of the result and returns one gradient per input. For multiplication,{" "}
         <TeX>{String.raw`z = x\,y`}</TeX>, backward returns <TeX>{String.raw`\bar z \cdot y`}</TeX> for <TeX>x</TeX> and{" "}
@@ -118,7 +118,7 @@ export function Autograd() {
         of all its partial derivatives, without building that table:
       </p>
       <TeX block>{String.raw`\bar{x}_i \;=\; \sum_j \frac{\partial y_j}{\partial x_i}\,\bar{y}_j, \qquad \text{where } \bar{v} \text{ means } \frac{\partial L}{\partial v}`}</TeX>
-      <p>For multiplication the whole class is this (<code>minitorch/mlops.py</code>, without its checks that skip gradients nothing needs):</p>
+      <p>For multiplication the whole class is this (<code>stackgrad/mlops.py</code>, without its checks that skip gradients nothing needs):</p>
       <pre className="code-block">{`class Mul(Function):
     def forward(self, x, y):
         self.x, self.y = x, y          # kept for backward
@@ -127,7 +127,7 @@ export function Autograd() {
     def backward(self, grad):          # grad is dL/dz for z = x * y
         return grad * self.y, grad * self.x`}</pre>
       <p>
-        All of minitorch's gradients live in one file, <code>mlops.py</code>, in nineteen such operations: add, multiply,
+        All of stackgrad's gradients live in one file, <code>mlops.py</code>, in nineteen such operations: add, multiply,
         reciprocal, exponential, logarithm, sigmoid, power, sum, max, reshape, transpose, broadcast, indexing, concatenation,
         matrix multiplication, and a few more. Subtraction is adding a negation, and division is multiplying by a reciprocal.
         Softmax, normalization layers, and the loss are short compositions of the nineteen, and none of them defines a
@@ -136,18 +136,18 @@ export function Autograd() {
       <p>
         Broadcasting needs care. Add a single number to a whole array and NumPy copies the number across the array, and
         NumPy calls this <b>broadcasting</b>. Each copy receives a gradient in the backward pass, so the backward pass has to
-        add the copies' gradients back into the one original number. minitorch makes the copy an explicit operation,{" "}
+        add the copies' gradients back into the one original number. stackgrad makes the copy an explicit operation,{" "}
         <code>Expand</code>, whose backward is that sum.
       </p>
       <h3>Checking every gradient two ways</h3>
       <p>
-        A wrong gradient does not crash anything. The model trains worse instead, and nothing points you to the cause. minitorch checks
+        A wrong gradient does not crash anything. The model trains worse instead, and nothing points you to the cause. stackgrad checks
         its gradients against two independent references. The first is the definition of a derivative: nudge an input up by a
         tiny amount <TeX>h</TeX>, then down, and measure the slope.
       </p>
       <TeX block>{String.raw`\frac{\partial f}{\partial x} \;\approx\; \frac{f(x + h) - f(x - h)}{2h}, \qquad h = 10^{-5}`}</TeX>
       <p>
-        The check is slow, since it reruns the function twice per input, but it needs no calculus and no trust. minitorch
+        The check is slow, since it reruns the function twice per input, but it needs no calculus and no trust. stackgrad
         compares it with backward's result for {int(r.bkM?.ops.total)} operations and layers, and Figure 3 shows a run of all
         of them on the server.
       </p>
@@ -161,7 +161,7 @@ export function Autograd() {
         curves would separate (Figure 4).
       </p>
       {parity && (
-        <Fig n={4} caption={<>Training loss of the same model in minitorch (thin blue line) and PyTorch (wide pink line), in {dtype}. They overlap. At step 1 they differ by {sci(parity.rows[0].abs_diff)}; the largest difference over {parity.steps} steps is {sci(parity.max_abs_loss_diff)}.</>}>
+        <Fig n={4} caption={<>Training loss of the same model in stackgrad (thin blue line) and PyTorch (wide pink line), in {dtype}. They overlap. At step 1 they differ by {sci(parity.rows[0].abs_diff)}; the largest difference over {parity.steps} steps is {sci(parity.max_abs_loss_diff)}.</>}>
           <div className="runs" role="group" aria-label="Precision">
             {(["float64", "float32"] as const).map((d) => (
               <button key={d} aria-pressed={d === dtype} onClick={() => setDtype(d)}>{d}</button>
@@ -180,13 +180,13 @@ export function Autograd() {
         larger, and the gap reaches {sci(r.p32?.max_abs_loss_diff)}. Switch the figure between the two to compare.
       </p>
       <p>
-        On the laptop's CPU, minitorch takes {num(r.p32?.median_ms_per_step.minitorch, 3)} ms per training step of this
+        On the laptop's CPU, stackgrad takes {num(r.p32?.median_ms_per_step.stackgrad, 3)} ms per training step of this
         model and PyTorch takes {num(r.p32?.median_ms_per_step.torch_cpu, 3)} ms, so PyTorch runs{" "}
-        {r.p32 ? (r.p32.median_ms_per_step.minitorch / r.p32.median_ms_per_step.torch_cpu).toFixed(1) : "…"} times faster.
+        {r.p32 ? (r.p32.median_ms_per_step.stackgrad / r.p32.median_ms_per_step.torch_cpu).toFixed(1) : "…"} times faster.
       </p>
       <h3 id="lazy">When does an operation run?</h3>
       <p>
-        Every operation so far ran the moment it was written. minitorch now waits: <code>c = a @ b</code> records the
+        Every operation so far ran the moment it was written. stackgrad now waits: <code>c = a @ b</code> records the
         multiplication and its inputs and returns a tensor that knows its shape and dtype but holds no numbers. The
         numbers are computed when something reads them, through <code>.numpy()</code>, <code>.item()</code>, printing,{" "}
         <code>.backward()</code>, or <code>.realize()</code>. tinygrad works the same way <Cite k="tinygrad" />.
@@ -213,7 +213,7 @@ y.numpy()      # realize: every operation y depends on runs, inputs first, once 
           and eager runs differ by {sci(lzMetal.both?.loss_gap_eager_lazy)}; a step takes{" "}
           {num(lzMetal.lazy?.ms_per_step, 3)} ms against {num(lzMetal.eager?.ms_per_step, 3)} ms. Laziness gives a
           compiler the whole graph before any of it runs, so the compiler can fuse operations into fewer kernels;
-          minitorch records the graph and stops there (<code>bench/lazy.py</code>, <code>tests/lazy.py</code>).
+          stackgrad records the graph and stops there (<code>bench/lazy.py</code>, <code>tests/lazy.py</code>).
         </p>
       )}
     </Section>

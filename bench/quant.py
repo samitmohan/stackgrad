@@ -9,7 +9,7 @@ For bfloat16, int8, and int4 weights (group size 64) on the M4 GPU:
 - the bandwidth ceiling: decoding reads every weight once per token, so no decoder can beat
   (memory bandwidth) / (bytes of weights). The bandwidth is measured here, with a large copy;
 - the matmuls alone, for one token, on Qwen3's largest and most common shapes: bfloat16, then
-  int8 and int4 through minitorch's Metal kernel and through MLX's (the oracle).
+  int8 and int4 through stackgrad's Metal kernel and through MLX's (the oracle).
 Writes bench/results/quant.json.
 """
 import json
@@ -22,12 +22,12 @@ import mlx.core as mx
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from minitorch import cross_entropy_loss, no_grad
-from minitorch.attention import KVCache
-from minitorch.backend import metal
-from minitorch.backend.metal_quant import quant_matmul
-from minitorch.quant import QuantLinear, quantize, quantize_model
-from minitorch.qwen3 import load_qwen3, load_tokenizer
+from stackgrad import cross_entropy_loss, no_grad
+from stackgrad.attention import KVCache
+from stackgrad.backend import metal
+from stackgrad.backend.metal_quant import quant_matmul
+from stackgrad.quant import QuantLinear, quantize, quantize_model
+from stackgrad.qwen3 import load_qwen3, load_tokenizer
 
 RESULTS = Path(__file__).resolve().parent / "results"
 MODEL = "data/Qwen3-0.6B"
@@ -85,7 +85,7 @@ def kernel_rows():
             p, s, b = mx.array(p), mx.array(s).astype(mx.bfloat16), mx.array(b).astype(mx.bfloat16)
             nbytes = p.nbytes + s.nbytes + b.nbytes
             args = {"x": x, "p": p, "s": s, "b": b, "bits": bits}
-            for impl, fn in [("minitorch", lambda a=args: quant_matmul(a["x"], a["p"], a["s"], a["b"], a["bits"], 64)),
+            for impl, fn in [("stackgrad", lambda a=args: quant_matmul(a["x"], a["p"], a["s"], a["b"], a["bits"], 64)),
                              ("MLX", lambda a=args: mx.quantized_matmul(a["x"], a["p"], a["s"], a["b"], transpose=True,
                                                                         group_size=64, bits=a["bits"]))]:
                 t = per_call(fn)
@@ -94,7 +94,7 @@ def kernel_rows():
 
 
 def mlx_kernel(x, packed, scales, biases, bits, group):
-    """MLX's quantized matmul, with minitorch's quant_matmul signature: the oracle to swap in."""
+    """MLX's quantized matmul, with stackgrad's quant_matmul signature: the oracle to swap in."""
     return mx.quantized_matmul(x, packed, scales, biases, transpose=True, group_size=group, bits=bits)
 
 

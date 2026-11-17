@@ -12,7 +12,7 @@ jobs:
       - uses: astral-sh/setup-uv@v4
       - run: uv sync --group dev --extra serve
       - name: Lint
-        run: uv run ruff check minitorch tests bench scripts examples apps train_gpt.py train_lora.py train_grpo.py test_grads.py
+        run: uv run ruff check stackgrad tests bench scripts examples apps train_gpt.py train_lora.py train_grpo.py test_grads.py
       - name: Gradient checks (finite differences)
         run: uv run python test_grads.py
       - name: PyTorch parity (ops, layers, attention, optimizers)

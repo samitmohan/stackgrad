@@ -1,4 +1,4 @@
-"""Qwen3 in minitorch: TransformerLM with Qwen3's options, loaded from a Hugging Face checkpoint.
+"""Qwen3 in stackgrad: TransformerLM with Qwen3's options, loaded from a Hugging Face checkpoint.
 
     model = load_qwen3("data/Qwen3-0.6B")    # config.json + model.safetensors
 
@@ -30,7 +30,7 @@ def config(path):
 
 
 def hf_names(n_layers):
-    """minitorch parameter name -> (Hugging Face tensor name, transpose?). HF Linear weights are (out, in); minitorch's are (in, out)."""
+    """stackgrad parameter name -> (Hugging Face tensor name, transpose?). HF Linear weights are (out, in); stackgrad's are (in, out)."""
     names = {"embed.weight": ("model.embed_tokens.weight", False), "norm.weight": ("model.norm.weight", False)}
     for i in range(n_layers):
         mine, hf = f"blocks.{i}.", f"model.layers.{i}."
@@ -74,7 +74,7 @@ def load_qwen3(path, context_length=4096):
 
 
 def load_tokenizer(path):
-    """Qwen's vocab.json and merges.txt in minitorch's BPE, with its special tokens at their own ids."""
+    """Qwen's vocab.json and merges.txt in stackgrad's BPE, with its special tokens at their own ids."""
     added = json.loads((Path(path) / "tokenizer.json").read_text())["added_tokens"]
     tok = Tokenizer.from_files(Path(path) / "vocab.json", Path(path) / "merges.txt", pattern=PAT, nfc=True)
     tok = Tokenizer({**tok.vocab, **{a["id"]: a["content"].encode() for a in added}},

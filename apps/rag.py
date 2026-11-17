@@ -1,9 +1,9 @@
-"""Retrieval on minitorch (SPEC.md M5): Qwen3-Embedding-0.6B finds the passage, Qwen3-0.6B on the server answers.
+"""Retrieval on stackgrad (SPEC.md M5): Qwen3-Embedding-0.6B finds the passage, Qwen3-0.6B on the server answers.
 
-    uv run uvicorn minitorch.serve.api:app --port 8000     # the server, if it is not already up
+    uv run uvicorn stackgrad.serve.api:app --port 8000     # the server, if it is not already up
     uv run python apps/rag.py                               # writes bench/results/rag.json
 
-The corpus is SQuAD v1.1's dev set, 2,067 Wikipedia paragraphs. minitorch embeds each paragraph
+The corpus is SQuAD v1.1's dev set, 2,067 Wikipedia paragraphs. stackgrad embeds each paragraph
 once: Qwen3-Embedding is Qwen3's architecture, and its embedding is the last token's hidden
 state, scaled to length 1. The index is a NumPy matrix, and a query's nearest paragraphs are
 its largest dot products. For --n questions drawn at random, the script measures retrieval (is
@@ -26,8 +26,8 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-from minitorch import backend, no_grad
-from minitorch.qwen3 import load_qwen3, load_tokenizer
+from stackgrad import backend, no_grad
+from stackgrad.qwen3 import load_qwen3, load_tokenizer
 
 EMBEDDER = ROOT / "data/Qwen3-Embedding-0.6B"
 INDEX = ROOT / "data/squad/qwen3_embedding_index.npy"

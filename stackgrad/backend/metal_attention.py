@@ -191,7 +191,7 @@ _V3 = _SHAPES + """
 """
 
 _KERNELS = {
-    name: mx.fast.metal_kernel(name=f"minitorch_attention_{name}", input_names=["q", "k", "v"],
+    name: mx.fast.metal_kernel(name=f"stackgrad_attention_{name}", input_names=["q", "k", "v"],
                                output_names=["out", "lse"], source=src)
     for name, src in [("v1", _V1), ("v2", _V2), ("v3", _V3)]
 }

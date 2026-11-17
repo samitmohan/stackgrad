@@ -15,7 +15,7 @@ from pathlib import Path
 
 import numpy as np
 
-from minitorch import (
+from stackgrad import (
     AdamW,
     LossScaler,
     TransformerLM,
@@ -25,7 +25,7 @@ from minitorch import (
     cross_entropy_loss,
     no_grad,
 )
-from minitorch.tokenizer import Tokenizer
+from stackgrad.tokenizer import Tokenizer
 
 EOT = "<|endoftext|>"
 

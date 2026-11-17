@@ -1,4 +1,4 @@
-"""Speculative decoding (minitorch/speculative.py): greedy output equals the target's, and samples follow its distribution.
+"""Speculative decoding (stackgrad/speculative.py): greedy output equals the target's, and samples follow its distribution.
 
     uv run python tests/speculative.py
 """
@@ -9,8 +9,8 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from minitorch import TransformerLM, no_grad
-from minitorch.speculative import speculative_generate
+from stackgrad import TransformerLM, no_grad
+from stackgrad.speculative import speculative_generate
 
 
 def model(vocab, seed, d_model):

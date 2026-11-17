@@ -32,7 +32,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import test_grads
-from minitorch import (
+from stackgrad import (
     Adam,
     AdamW,
     KVCache,
@@ -194,8 +194,8 @@ def check_bfloat16(device):
 def check_kernels():
     import mlx.core as mx
 
-    from minitorch.attention import scaled_dot_product_attention
-    from minitorch.backend import metal_attention
+    from stackgrad.attention import scaled_dot_product_attention
+    from stackgrad.backend import metal_attention
 
     failed = []
     for B, H, Hkv, T, S, D in [(2, 4, 4, 64, 64, 32), (1, 4, 2, 37, 37, 64), (2, 8, 2, 1, 50, 128),
@@ -219,8 +219,8 @@ def check_triton_kernels():
     """The Triton FlashAttention-2 forward and backward against mlops.Attention's own math in float64."""
     import cupy as cp
 
-    from minitorch.attention import scaled_dot_product_attention
-    from minitorch.backend import cuda_attention
+    from stackgrad.attention import scaled_dot_product_attention
+    from stackgrad.backend import cuda_attention
 
     failed, shapes = [], [(2, 4, 4, 64, 64, 32), (1, 4, 2, 37, 37, 64), (2, 8, 2, 1, 50, 128),
                           (1, 2, 1, 5, 70, 64), (1, 16, 8, 100, 300, 128)]

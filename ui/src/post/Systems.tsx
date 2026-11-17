@@ -16,7 +16,7 @@ export function Gpu() {
         transformer, which spends its time in large matrix multiplications.
       </p>
       <p>
-        minitorch runs on three array libraries that share NumPy's interface: <b>NumPy</b> on the CPU as the readable
+        stackgrad runs on three array libraries that share NumPy's interface: <b>NumPy</b> on the CPU as the readable
         reference, <b>MLX</b> <Cite k="mlx" /> on the Apple laptop's GPU, and <b>CuPy</b> <Cite k="cupy" /> on an NVIDIA GPU.
         The gradient code in <code>mlops.py</code> never calls any of them by name. Each operation receives a module called{" "}
         <code>xp</code> that exposes the same dozen functions over its own kind of array, so one copy of every gradient runs
@@ -24,7 +24,7 @@ export function Gpu() {
       </p>
       <Aside title="Two quirks of MLX that shaped the engine">
         <p>
-          Code cannot change an MLX array after creating it, so minitorch never updates a gradient in place: adding to a
+          Code cannot change an MLX array after creating it, so stackgrad never updates a gradient in place: adding to a
           gradient makes a new array. MLX is also <b>lazy</b>. An operation records what to compute, and MLX runs the work when
           code reads a value. Pending work keeps growing until something reads a result, so the optimizer computes the new
           weights at the end of each step, or each step's pending work would pile onto the last.
@@ -39,14 +39,14 @@ export function Gpu() {
       <h3>A GPU does not win by default</h3>
       <p>
         Starting a kernel has a fixed cost. The CPU describes the work and hands it to the GPU's driver, and the GPU schedules
-        it. For a small array, that fixed cost is the whole cost. Through minitorch, one elementwise
+        it. For a small array, that fixed cost is the whole cost. Through stackgrad, one elementwise
         multiplication on a thousand numbers takes {num(r.opNumpy, 2)} µs with NumPy, {num(r.opMlx, 2)} µs on the Apple GPU,
         and {num(r.opCupy, 2)} µs on the NVIDIA GPU, so the CPU wins. On ten million numbers it takes {num(r.bigNumpy, 3)} µs,{" "}
         {num(r.bigMlx, 3)} µs, and {num(r.bigCupy, 3)} µs, and the NVIDIA GPU wins by
         {r.bigNumpy && r.bigCupy ? ` ${(r.bigNumpy / r.bigCupy).toFixed(1)}x` : " …"}. Figure 9 shows the crossover.
       </p>
       {r.ovM && (
-        <Fig n={9} caption={<>The cost of one elementwise multiplication against the size of the array, both on log scales. The buttons switch between the raw array library, the library with a wait for the GPU to finish after every operation, and minitorch on top of the library. The waiting view exposes each device's round trip: {num(r.syncMlx, 3)} µs on the Apple GPU and {num(r.syncCupy, 3)} µs on the NVIDIA GPU.</>}>
+        <Fig n={9} caption={<>The cost of one elementwise multiplication against the size of the array, both on log scales. The buttons switch between the raw array library, the library with a wait for the GPU to finish after every operation, and stackgrad on top of the library. The waiting view exposes each device's round trip: {num(r.syncMlx, 3)} µs on the Apple GPU and {num(r.syncCupy, 3)} µs on the NVIDIA GPU.</>}>
           <OpCost rows={[...r.ovM.elementwise, ...(r.ovC?.elementwise ?? [])]} />
         </Fig>
       )}
@@ -72,9 +72,9 @@ export function Gpu() {
       )}
       <p>
         A whole training step of the story model spends most of its time in large matrix multiplications, so the GPUs win there (Figure 11).
-        The NVIDIA GPU trains {num(r.cudaVsCpu, 3)}x faster than the laptop's CPU. On the Apple GPU, minitorch reaches{" "}
+        The NVIDIA GPU trains {num(r.cudaVsCpu, 3)}x faster than the laptop's CPU. On the Apple GPU, stackgrad reaches{" "}
         {pct(r.mlxShare, 0)} of the speed of the same model written in plain MLX with MLX's own hand-tuned kernels, which
-        measures what minitorch's generality costs there.
+        measures what stackgrad's generality costs there.
       </p>
       {r.ovM && (
         <Fig n={11} caption={<>One training step of the story model, with a batch of {r.ovM.train_step[0]?.batch} sequences of 256 tokens: forward, backward, clipping, and the optimizer update. Longer bars are faster.</>}>
@@ -110,7 +110,7 @@ export function Attention() {
     <Section id="attention" n={7} title="Can a hand-written kernel beat the library's?">
       <p>
         Recall attention from §4: compute scores <TeX>{String.raw`S = QK^\top/\sqrt{d}`}</TeX> between every pair of
-        positions, apply the mask, take the softmax, and use the result to average the values. Composed from minitorch's basic
+        positions, apply the mask, take the softmax, and use the result to average the values. Composed from stackgrad's basic
         operations, each of those steps is its own kernel. The score matrix has one entry per pair of positions, so for 256
         tokens and 16 heads it holds a million numbers per sequence, and every step writes all of them to the GPU's memory and
         the next step reads them back.
@@ -169,7 +169,7 @@ export function Attention() {
           <h3>Where a training step's time goes</h3>
           <p>
             A kernel is worth writing only for an operation that costs something, and a profiler says which ones do. Inside{" "}
-            <code>with profile():</code> (<code>minitorch/profile.py</code>), every primitive waits for the GPU to finish
+            <code>with profile():</code> (<code>stackgrad/profile.py</code>), every primitive waits for the GPU to finish
             before the next one starts, so each one's time is its own. One forward and backward pass of the story model on{" "}
             {int(p.batch)} sequences of {int(p.context)} tokens takes {num(p.profiled_ms, 3)} ms this way on the Apple GPU. A
             normal step, optimizer included, takes {num(p.step_ms, 3)} ms, because there the GPU queues work without waiting.
@@ -225,7 +225,7 @@ export function Serving() {
   return (
     <Section id="serving" n={9} title="Can it serve two people at once?">
       <p>
-        minitorch now computes the same scores as the reference, one forward pass at a time. A chat reply needs one forward
+        stackgrad now computes the same scores as the reference, one forward pass at a time. A chat reply needs one forward
         pass per new token, hundreds in all. Without care, step <TeX>t</TeX> recomputes the keys and
         values of all <TeX>t</TeX> earlier tokens, although they never change. The <b>KV cache</b> stores them instead: each
         step computes keys and values for the one new token, appends them, and attends over the stored ones. The work per
@@ -235,12 +235,12 @@ export function Serving() {
       <p>
         That memory limits how many people one GPU can serve. Reserving the maximum length for each request wastes the part a
         short reply never uses. vLLM's PagedAttention <Cite k="paged" /> stores the cache in small fixed-size blocks, handed
-        out as a sequence grows and taken back the moment it finishes. minitorch's <b>block manager</b> keeps the same books:
+        out as a sequence grows and taken back the moment it finishes. stackgrad's <b>block manager</b> keeps the same books:
         it counts each sequence's blocks and decides which requests run. The memory itself stays one array per cache.
       </p>
       <p>
         The second idea is <b>continuous batching</b> <Cite k="orca" />. A plain batch of requests runs until its longest
-        reply finishes, while finished requests sit idle. minitorch's scheduler instead admits new requests between any two
+        reply finishes, while finished requests sit idle. stackgrad's scheduler instead admits new requests between any two
         generation steps, runs every admitted request through each step together, and lets each one leave as soon as it is
         done. If the cache runs out of blocks, the scheduler <b>preempts</b> the newest request. That request gives back its
         blocks, waits, and later rebuilds its cache from its prompt plus the tokens it had already produced.
@@ -264,7 +264,7 @@ export function Serving() {
       )}
       <p>
         In Figure 12 the engine serves Qwen3. Messages go through an endpoint shaped like OpenAI's chat API into the
-        scheduler and engine, and Qwen3 runs in minitorch on the Apple GPU in bfloat16. Thinking mode is off, so it answers
+        scheduler and engine, and Qwen3 runs in stackgrad on the Apple GPU in bfloat16. Thinking mode is off, so it answers
         without a reasoning preamble.
       </p>
       <Fig n={12} caption="Chat with Qwen3-0.6B, live. The reply streams in token by token; the line under it gives the time to the first token and the speed after it. Open this page twice and send from both, and the engine runs the two conversations through the same decode steps.">

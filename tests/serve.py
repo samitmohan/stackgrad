@@ -18,11 +18,11 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from minitorch import TransformerLM, no_grad
-from minitorch.serve.engine import Engine
-from minitorch.serve.kv_cache import BlockManager
-from minitorch.serve.runner import MinitorchRunner
-from minitorch.serve.scheduler import Request, Scheduler
+from stackgrad import TransformerLM, no_grad
+from stackgrad.serve.engine import Engine
+from stackgrad.serve.kv_cache import BlockManager
+from stackgrad.serve.runner import StackgradRunner
+from stackgrad.serve.scheduler import Request, Scheduler
 
 
 def check_blocks():
@@ -42,7 +42,7 @@ def check_blocks():
 
 
 def run(model, requests, num_blocks, max_batch):
-    sched = Scheduler(MinitorchRunner(model), BlockManager(num_blocks, block_size=4), max_batch)
+    sched = Scheduler(StackgradRunner(model), BlockManager(num_blocks, block_size=4), max_batch)
     for r in requests:
         sched.add(r)
     steps = 0
@@ -85,7 +85,7 @@ def main():
         if name == "tiny KV budget":
             assert preemptions > 0, "the tiny budget never forced a preemption"
     # the engine: one thread per caller, all submitting at once
-    engine = Engine(Scheduler(MinitorchRunner(model), BlockManager(9, block_size=4), max_batch=8), threading.Lock())
+    engine = Engine(Scheduler(StackgradRunner(model), BlockManager(9, block_size=4), max_batch=8), threading.Lock())
     streams, threads = {}, []
     for i, (prompt, m) in enumerate(specs):
         def call(i=i, prompt=prompt, m=m):
@@ -105,7 +105,7 @@ def main():
         print("[ok]   engine: a request that can never fit is refused at submit")
 
     # a step that fails: its request and one queued behind it hear about it, and the engine keeps serving
-    class FailOnce(MinitorchRunner):
+    class FailOnce(StackgradRunner):
         failed = False
 
         def prefill(self, seq_id, tokens):
@@ -131,8 +131,8 @@ def main():
 
     from fastapi.testclient import TestClient
 
-    from minitorch.serve import api
-    from minitorch.serve.api import _parse
+    from stackgrad.serve import api
+    from stackgrad.serve.api import _parse
     with tempfile.TemporaryDirectory() as tmp:
         api.RUNS = Path(tmp)
         (Path(tmp) / "done").mkdir()

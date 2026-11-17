@@ -5,7 +5,7 @@
 
 1. elementwise: 64 chained multiplies on n floats, timed per op three ways:
    the raw backend array, the backend with a sync after every op, and through
-   minitorch Tensors (no_grad), which adds the Python cost of the framework.
+   stackgrad Tensors (no_grad), which adds the Python cost of the framework.
 2. matmul: square float32 (and bfloat16 on metal) matmuls, in TFLOP/s.
 3. train step: one CS336 TinyStories step (fwd + bwd + AdamW) per device, and the
    same model written in plain MLX (mlx.nn, its fused kernels) as the target.
@@ -24,7 +24,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from minitorch import (
+from stackgrad import (
     AdamW,
     Tensor,
     TransformerLM,
@@ -80,7 +80,7 @@ def elementwise(device, K=64):
                     x = x * 1.0001
             sync(x.data)
 
-        for path, fn in [("raw", raw), ("sync every op", raw_sync_each), ("minitorch", framework)]:
+        for path, fn in [("raw", raw), ("sync every op", raw_sync_each), ("stackgrad", framework)]:
             rows.append({"device": device, "path": path, "n": n, "us_per_op": round(median_time(fn) / K * 1e6, 2)})
             print(f"  elementwise {device:5s} {path:14s} n={n:>9,}: {rows[-1]['us_per_op']:9.2f} us/op")
     return rows
@@ -128,7 +128,7 @@ def train_step(device, batch):
         opt.step()
         loss.item()
 
-    return step_row("minitorch", device, batch, median_time(step, min_seconds=3, min_reps=4))
+    return step_row("stackgrad", device, batch, median_time(step, min_seconds=3, min_reps=4))
 
 
 def mlx_train_step(batch):

@@ -35,7 +35,7 @@ const GLOSSARY: [string, string][] = [
   ["Token", "A piece of text, a word or part of one, that the model reads as a single id (§3)."],
 ];
 
-const BIBTEX = `@misc{mohan2026minitorch,
+const BIBTEX = `@misc{mohan2026stackgrad,
   author = {Samit Mohan},
   title  = {Deep learning framework from scratch},
   year   = {2026},
@@ -100,13 +100,13 @@ export function Appendix() {
 
       <h3 id="other-models">Other models</h3>
       <p>
-        Like tinygrad's <code>examples/</code> folder, two more models run on minitorch's layers, one file each, loaded from
+        Like tinygrad's <code>examples/</code> folder, two more models run on stackgrad's layers, one file each, loaded from
         their published weights through the safetensors reader of §8 and checked against the reference libraries.
       </p>
       {r.gpt2 && (
         <Fig n="A1" table caption={<>GPT-2 ({(r.gpt2.params / 1e6).toFixed(0)}M parameters) in <code>examples/gpt2.py</code> against transformers, from <code>tests/gpt2.py</code>: logits for a {r.gpt2.prompt_tokens}-token prompt, and whether greedy decoding reproduces transformers' first {r.gpt2.greedy_tokens} tokens.</>}>
           <table className="results">
-            <thead><tr><th>minitorch on</th><th className="num">Largest gap</th><th className="num">Relative to the largest logit</th><th className="num">Same next token</th><th>Greedy text</th></tr></thead>
+            <thead><tr><th>stackgrad on</th><th className="num">Largest gap</th><th className="num">Relative to the largest logit</th><th className="num">Same next token</th><th>Greedy text</th></tr></thead>
             <tbody>
               {r.gpt2.logits.map((l) => (
                 <tr key={l.device}><th>{l.device === "cpu" ? "CPU (NumPy)" : "Apple GPU"}</th><td className="num">{sci(l.max_gap)}</td><td className="num">{sci(l.relative_gap)}</td>
@@ -121,7 +121,7 @@ export function Appendix() {
         encoder <Cite k="clip" />, a {r.sdParity ? `${num(r.sdParity.unet_params / 1e6, 3)}M` : "…"}-parameter UNet that removes
         noise from a 4 by 64 by 64 latent over DDIM's steps <Cite k="ddim" /> with classifier-free guidance <Cite k="cfg" />, and a
         VAE decoder that turns the latent into pixels. <code>examples/stable_diffusion.py</code> builds all three from
-        minitorch's layers; the convolutions run on the GPU through <code>im2col</code>. Its core, condensed:
+        stackgrad's layers; the convolutions run on the GPU through <code>im2col</code>. Its core, condensed:
       </p>
       <pre className="code-block">{`uv run python examples/stable_diffusion.py --prompt "a lighthouse at dusk"
 
@@ -137,7 +137,7 @@ for t, t_prev in zip(times, [*times[1:], -1]):     # 25 DDIM steps
     x = ddim_step(x, noise, t, t_prev)
 image = load_vae(path, device).decode(Tensor(x, device=device))  # pixels`}</pre>
       {r.sdParity && (
-        <Fig n="A2" table caption={<>Each network of Stable Diffusion v1.5 in minitorch against transformers (CLIP) and diffusers (UNet, VAE), from <code>tests/stable_diffusion.py</code>: the largest difference between the outputs, over the reference's largest value. The UNet sees a 32 by 32 latent and the VAE a 16 by 16 one; every layer still runs.</>}>
+        <Fig n="A2" table caption={<>Each network of Stable Diffusion v1.5 in stackgrad against transformers (CLIP) and diffusers (UNet, VAE), from <code>tests/stable_diffusion.py</code>: the largest difference between the outputs, over the reference's largest value. The UNet sees a 32 by 32 latent and the VAE a 16 by 16 one; every layer still runs.</>}>
           <table className="results">
             <thead><tr><th>Network</th><th className="num">Parameters</th><th className="num">CPU (NumPy)</th><th className="num">Apple GPU (MLX)</th></tr></thead>
             <tbody>
@@ -150,9 +150,9 @@ image = load_vae(path, device).decode(Tensor(x, device=device))  # pixels`}</pre
         </Fig>
       )}
       {r.sd && (
-        <Fig n="A2" caption={<>"{r.sd.prompt}", {r.sd.steps} DDIM steps, guidance {r.sd.guidance}, float32 on the Apple GPU from the same starting noise, from <code>bench/stable_diffusion.py</code>. The largest pixel difference is {num(r.sd.max_pixel_gap * 255, 2)} of 255 levels. A step takes {num(r.sd.minitorch_metal_s_per_step, 3)} s in minitorch and {num(r.sd.diffusers_mps_s_per_step, 3)} s in diffusers on the same chip.</>}>
+        <Fig n="A2" caption={<>"{r.sd.prompt}", {r.sd.steps} DDIM steps, guidance {r.sd.guidance}, float32 on the Apple GPU from the same starting noise, from <code>bench/stable_diffusion.py</code>. The largest pixel difference is {num(r.sd.max_pixel_gap * 255, 2)} of 255 levels. A step takes {num(r.sd.stackgrad_metal_s_per_step, 3)} s in stackgrad and {num(r.sd.diffusers_mps_s_per_step, 3)} s in diffusers on the same chip.</>}>
           <div className="image-pair">
-            <div><img src="/results/stable_diffusion_minitorch.png" alt={`Stable Diffusion's image for "${r.sd.prompt}", drawn by minitorch`} /><span>minitorch</span></div>
+            <div><img src="/results/stable_diffusion_stackgrad.png" alt={`Stable Diffusion's image for "${r.sd.prompt}", drawn by stackgrad`} /><span>stackgrad</span></div>
             <div><img src="/results/stable_diffusion_diffusers.png" alt="The same image drawn by diffusers on PyTorch" /><span>diffusers on PyTorch</span></div>
           </div>
         </Fig>

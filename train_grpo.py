@@ -19,10 +19,10 @@ from pathlib import Path
 import numpy as np
 
 from bench.gsm8k import PROMPT, final_number, gold_number, matches
-from minitorch import AdamW, clip_grad_norm
-from minitorch import functional as F
-from minitorch.lora import apply_lora, save_adapter
-from minitorch.qwen3 import chat_prompt, load_qwen3, load_tokenizer
+from stackgrad import AdamW, clip_grad_norm
+from stackgrad import functional as F
+from stackgrad.lora import apply_lora, save_adapter
+from stackgrad.qwen3 import chat_prompt, load_qwen3, load_tokenizer
 from train_lora import make_batch, reply_logits
 
 
@@ -106,7 +106,7 @@ def main():
     p.add_argument("--lr", type=float, default=1e-4)
     # shortcut: one reply per pass. A reply runs to 320 tokens after a ~150-token prompt, and LoRA's update peaked at
     # 17.9 GB on the 3090 for 2 shorter examples (train_lora.py), so 2 long replies may not fit. Checkpointing each block
-    # (minitorch.checkpoint) would fit more; measure before raising this
+    # (stackgrad.checkpoint) would fit more; measure before raising this
     p.add_argument("--micro", type=int, default=1, help="replies per forward pass in the update")
     p.add_argument("--clip", type=float, default=1.0)
     p.add_argument("--seed", type=int, default=0)

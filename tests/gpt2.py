@@ -1,4 +1,4 @@
-"""GPT-2 in minitorch (examples/gpt2.py) against Hugging Face's transformers.
+"""GPT-2 in stackgrad (examples/gpt2.py) against Hugging Face's transformers.
 
     uv run python tests/gpt2.py
 
@@ -16,7 +16,7 @@ from transformers import GPT2LMHeadModel
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from examples.gpt2 import generate, load_gpt2, load_tokenizer
-from minitorch import no_grad
+from stackgrad import no_grad
 
 PATH = ROOT / "data/gpt2"
 PROMPT = "Hello, I'm a language model, and the first thing I learned was"

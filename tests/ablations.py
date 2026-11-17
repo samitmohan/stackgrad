@@ -9,8 +9,8 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from minitorch import AdamW, Tensor, TransformerLM, cross_entropy_loss
-from minitorch.layers import DepthAttention
+from stackgrad import AdamW, Tensor, TransformerLM, cross_entropy_loss
+from stackgrad.layers import DepthAttention
 
 D = 48
 VARIANTS = {"baseline": {}, "no RMSNorm": {"norm": "none"}, "post-norm": {"norm": "post"},

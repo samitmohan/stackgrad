@@ -2,7 +2,7 @@
 
     uv run python bench/serve_batch.py
 
-Qwen3-0.6B in bfloat16 behind the Scheduler and a 512-block KV budget, as minitorch/serve/api.py runs
+Qwen3-0.6B in bfloat16 behind the Scheduler and a 512-block KV budget, as stackgrad/serve/api.py runs
 it. N GSM8K prompts in the chat template, of different lengths, arrive together, and each decodes 128
 tokens greedily with no stop token. The runner's decode as it was before batching, one forward pass
 per sequence, runs beside the batched one (runner.py). Reports the time for all N replies, the tokens
@@ -20,18 +20,18 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from bench.gsm8k import PROMPT
-from minitorch import no_grad
-from minitorch.qwen3 import chat_prompt, load_qwen3, load_tokenizer
-from minitorch.serve.kv_cache import BlockManager
-from minitorch.serve.runner import MinitorchRunner
-from minitorch.serve.scheduler import Request, Scheduler
+from stackgrad import no_grad
+from stackgrad.qwen3 import chat_prompt, load_qwen3, load_tokenizer
+from stackgrad.serve.kv_cache import BlockManager
+from stackgrad.serve.runner import StackgradRunner
+from stackgrad.serve.scheduler import Request, Scheduler
 
 RESULTS = Path(__file__).resolve().parent / "results"
 MAX_NEW = 128
 REPEATS = 3
 
 
-class OnePerSequence(MinitorchRunner):
+class OnePerSequence(StackgradRunner):
     """The runner before batching: each sequence's decode is its own forward pass."""
     def decode(self, seq_ids, tokens):
         with no_grad():
@@ -58,7 +58,7 @@ def main():
     with open("data/gsm8k/test.jsonl") as f:
         questions = [json.loads(line)["question"] for line in f][:8]
     prompts = [tok.encode(chat_prompt([{"role": "user", "content": PROMPT.format(question=q)}])) for q in questions]
-    modes = {"one forward per sequence": OnePerSequence, "one forward per step": MinitorchRunner}
+    modes = {"one forward per sequence": OnePerSequence, "one forward per step": StackgradRunner}
     for runner in modes.values():
         serve(runner(model), prompts[:2])  # warm up: the first calls allocate
 

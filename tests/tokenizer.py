@@ -12,7 +12,7 @@ from pathlib import Path
 import tiktoken
 from huggingface_hub import hf_hub_download, snapshot_download
 
-from minitorch.tokenizer import PAT, Tokenizer, _merge, train_bpe
+from stackgrad.tokenizer import PAT, Tokenizer, _merge, train_bpe
 
 EOT = "<|endoftext|>"
 CORPUS = [
@@ -92,7 +92,7 @@ QWEN_EDGES = [
 def check_qwen_parity():
     from transformers import AutoTokenizer
 
-    from minitorch.qwen3 import chat_prompt, load_tokenizer
+    from stackgrad.qwen3 import chat_prompt, load_tokenizer
 
     path = "data/Qwen3-0.6B"
     if not Path(path).exists():  # CI: fetch only the tokenizer files (15 MB), not the weights

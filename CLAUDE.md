@@ -1,12 +1,17 @@
-# minitorch
+# stackgrad
+
+- Renamed from minitorch on 2026-11-17 (user's choice; Cornell's minitorch course and a PyPI package had the
+  name). The GitHub repo (github.com/samitmohan/minitorch), its docs at samitmohan.github.io/minitorch, the post's URL
+  samitmohan.in/blog/minitorch, the local directory, and `~/samit_workspace/minitorch` on bqa3 keep the old name
+  (user, 2026-11-17: both URLs stay live). Renaming the GitHub repo would move the docs to /stackgrad.
 
 - Backends: NumPy (reference), CuPy (CUDA, training throughput on bqa3), MLX (Metal).
 - Custom kernels: Metal through `mx.fast.metal_kernel` on the Mac, and Triton on the NVIDIA
   path (decided 2026-11-05, for CS336 A2's FlashAttention-2). Ruff TID251 bans CuPy's raw
   kernel APIs (`cupy.RawKernel`, `RawModule`, `ElementwiseKernel`, `ReductionKernel`).
 - PyTorch, tiktoken, and HF transformers are test oracles and comparison baselines
-  only (dev dependency group). Never import them from `minitorch/`.
-- UI: FastAPI (`minitorch/serve/api.py`) + React/Vite/TS in `ui/`.
+  only (dev dependency group). Never import them from `stackgrad/`.
+- UI: FastAPI (`stackgrad/serve/api.py`) + React/Vite/TS in `ui/`.
   The UI is one blog post and nothing else (decided 2026-11-05): no dashboard pages.
   Every experiment and result lives in the post, as prose plus live figures from
   bench/results and runs/ (reference style: rikiyat.github.io/blog/weight-space-programming).
@@ -32,7 +37,7 @@
   `uv run python scripts/export_paper.py ../portfolio/web` copies the results and replays into the site. A prose change
   here has to be made there too: export_paper.py fails when any section's paragraphs differ between the two (captions,
   figures, Head.tsx and kit.tsx may differ).
-- Every gradient lives in `minitorch/mlops.py`. Everything else composes those ops.
+- Every gradient lives in `stackgrad/mlops.py`. Everything else composes those ops.
 - `TransformerLM(attn_res=True)` is Block Attention Residuals (DepthAttention in layers.py), an option only (user,
   2026-11-06): no retraining or measuring it. The paper's §5 says so in one paragraph and links the user's Attention
   Residuals post.
@@ -53,7 +58,7 @@
 - Git: do not commit. The user reviews diffs and commits at milestone checkpoints.
 - On the Mac, run one model-loading job at a time (user, 2026-11-05): 16 GB of unified memory overflowed
   with an eval, the API server, and the RAG embedder up together. Wait for one to finish before starting the next.
-  Stop a server with `pkill -f 'uvicorn minitorch.serve.api'`, then confirm with `pgrep -f` that it is gone: killing
+  Stop a server with `pkill -f 'uvicorn stackgrad.serve.api'`, then confirm with `pgrep -f` that it is gone: killing
   the `uv run` wrapper's pid leaves its Python child running (an orphan server held 2.4 GB for 9 hours on 2026-11-05).
 - Never use bqa1 for this project (user, 2026-11-05). All GPU work runs on bqa3.
 - CuPy runs on bqa3 (`ssh bqa3`, RTX 3090): `uv sync --extra cuda --no-dev` (the dev group
@@ -66,4 +71,4 @@
   `uv run python tests/tokenizer.py`, `uv run python tests/lazy.py`,
   `uv run python tests/backends.py --device metal`; with the Metal GPU and data/Qwen3-0.6B:
   `uv run python tests/quant.py`, `uv run python tests/qwen3.py`; with data/gpt2: `uv run python tests/gpt2.py`; with data/sd15 (and nothing else loaded): `uv run python tests/stable_diffusion.py`. UI: `cd ui && npm run lint && npx vitest run && npx playwright test`.
-  Lint: `uv run ruff check minitorch tests bench scripts examples apps train_gpt.py train_lora.py train_grpo.py test_grads.py`.
+  Lint: `uv run ruff check stackgrad tests bench scripts examples apps train_gpt.py train_lora.py train_grpo.py test_grads.py`.

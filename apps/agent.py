@@ -1,6 +1,6 @@
-"""A calculator agent on minitorch's server (SPEC.md M5): Qwen3-0.6B solves GSM8K with a tool for arithmetic.
+"""A calculator agent on stackgrad's server (SPEC.md M5): Qwen3-0.6B solves GSM8K with a tool for arithmetic.
 
-    uv run uvicorn minitorch.serve.api:app --port 8000     # the server, if it is not already up
+    uv run uvicorn stackgrad.serve.api:app --port 8000     # the server, if it is not already up
     uv run python apps/agent.py                            # writes bench/results/gsm8k_agent.json
 
 Each problem is a conversation through the server's OpenAI-shaped endpoint. The model sees the

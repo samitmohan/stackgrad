@@ -1,4 +1,4 @@
-"""Activation checkpointing (minitorch/checkpoint.py): the same loss and gradients, in less memory.
+"""Activation checkpointing (stackgrad/checkpoint.py): the same loss and gradients, in less memory.
 
     uv run python tests/checkpoint.py
 """
@@ -8,8 +8,8 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from minitorch import TransformerLM, autocast, cross_entropy_loss
-from minitorch.lora import apply_lora
+from stackgrad import TransformerLM, autocast, cross_entropy_loss
+from stackgrad.lora import apply_lora
 
 CONFIG = {"vocab_size": 50, "context_length": 64, "d_model": 32, "n_layers": 3, "n_heads": 4, "d_ff": 64, "n_kv_heads": 2}
 

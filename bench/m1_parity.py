@@ -1,4 +1,4 @@
-"""Loss-curve parity: the same small LM trained by minitorch and by PyTorch, step for step.
+"""Loss-curve parity: the same small LM trained by stackgrad and by PyTorch, step for step.
 
 Both start from the same weights, see the same batches, and use the same AdamW,
 cosine schedule, and clipping. Writes bench/results/m1_parity.json and a plot.
@@ -16,7 +16,7 @@ import torch
 import torch.nn.functional as TF
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from minitorch import (
+from stackgrad import (
     AdamW,
     TransformerLM,
     clip_grad_norm,
@@ -29,7 +29,7 @@ RESULTS = Path(__file__).resolve().parent / "results"
 
 
 def torch_forward(P, idx, n_layers, n_heads):
-    """TransformerLM in plain torch over the same state_dict names; Linear weights are (in, out) like minitorch."""
+    """TransformerLM in plain torch over the same state_dict names; Linear weights are (in, out) like stackgrad."""
     def rms(x, w):
         return TF.rms_norm(x, (x.shape[-1],), w, eps=1e-5)
 
@@ -105,16 +105,16 @@ def main():
         topt.step()
         t_th = time.perf_counter() - t0
 
-        rows.append({"step": step, "minitorch": loss.item(), "torch": tloss.item(),
-                     "abs_diff": abs(loss.item() - tloss.item()), "ms_minitorch": t_mt * 1e3, "ms_torch": t_th * 1e3})
+        rows.append({"step": step, "stackgrad": loss.item(), "torch": tloss.item(),
+                     "abs_diff": abs(loss.item() - tloss.item()), "ms_stackgrad": t_mt * 1e3, "ms_torch": t_th * 1e3})
         if step % 20 == 0 or step == 1:
             r = rows[-1]
-            print(f"step {step:4d} | minitorch {r['minitorch']:.5f} | torch {r['torch']:.5f} | diff {r['abs_diff']:.2e}")
+            print(f"step {step:4d} | stackgrad {r['stackgrad']:.5f} | torch {r['torch']:.5f} | diff {r['abs_diff']:.2e}")
 
     diffs = [r["abs_diff"] for r in rows]
     summary = {"config": cfg, "params": n_params, "steps": args.steps, "batch": args.batch,
                "max_abs_loss_diff": max(diffs), "final_abs_loss_diff": diffs[-1],
-               "median_ms_per_step": {"minitorch": float(np.median([r["ms_minitorch"] for r in rows])),
+               "median_ms_per_step": {"stackgrad": float(np.median([r["ms_stackgrad"] for r in rows])),
                                       "torch_cpu": float(np.median([r["ms_torch"] for r in rows]))},
                "rows": rows}
     summary["dtype"] = "float64" if args.float64 else "float32"
@@ -126,7 +126,7 @@ def main():
     fig, (a1, a2) = plt.subplots(1, 2, figsize=(11, 4))
     steps = [r["step"] for r in rows]
     a1.plot(steps, [r["torch"] for r in rows], label="PyTorch", lw=3, alpha=0.5)
-    a1.plot(steps, [r["minitorch"] for r in rows], label="minitorch", lw=1)
+    a1.plot(steps, [r["stackgrad"] for r in rows], label="stackgrad", lw=1)
     a1.set(xlabel="step", ylabel="train loss", title=f"{n_params / 1e6:.1f}M-param LM, same weights and batches")
     a1.legend()
     a2.semilogy(steps, diffs)

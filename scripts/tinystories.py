@@ -17,7 +17,7 @@ from pathlib import Path
 import numpy as np
 from huggingface_hub import hf_hub_download
 
-from minitorch.tokenizer import Tokenizer, chunk_bounds, save, train_bpe
+from stackgrad.tokenizer import Tokenizer, chunk_bounds, save, train_bpe
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"

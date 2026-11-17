@@ -2,7 +2,7 @@ import { useState } from "react";
 
 type Turn = { role: "user" | "assistant"; content: string; stats?: string };
 
-/** Talk to Qwen3-0.6B through minitorch's serving engine, over its OpenAI-compatible endpoint, streaming. */
+/** Talk to Qwen3-0.6B through stackgrad's serving engine, over its OpenAI-compatible endpoint, streaming. */
 export function Chat() {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [input, setInput] = useState("What is 17 times 23? Show the steps briefly.");

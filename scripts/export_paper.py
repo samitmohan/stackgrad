@@ -18,7 +18,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from minitorch.serve.api import RUNS, _read_jsonl, bench, runs
+from stackgrad.serve.api import RUNS, _read_jsonl, bench, runs
 
 ROOT = Path(__file__).resolve().parent.parent
 CURVE_POINTS = 700  # RunCurve draws at most this many points; sending more to a static page only adds bytes
@@ -94,13 +94,16 @@ def main():
     replays = {f.stem: json.loads(f.read_text()) for f in sorted((ROOT / "bench" / "replays").glob("*.json"))}
     (public / "attention.json").write_text(json.dumps(attention(replays.pop("attention")), separators=(",", ":")) + "\n")
     (data / "replays.json").write_text(json.dumps(replays, ensure_ascii=False, separators=(",", ":")) + "\n")
-    for name in ["stable_diffusion_minitorch.png", "stable_diffusion_diffusers.png"]:
+    for name in ["stable_diffusion_stackgrad.png", "stable_diffusion_diffusers.png"]:
         shutil.copy(ROOT / "bench" / "results" / name, public / name)
 
     for f in [data / "results.json", data / "replays.json", public / "attention.json"]:
         print(f"{f.relative_to(site)}: {f.stat().st_size / 1024:.0f} KB")
 
-    drift = prose_drift(site / "src" / "paper" / "minitorch" / "post")
+    port = site / "src" / "paper" / "minitorch" / "post"
+    if not port.is_dir():  # without it the comparison below finds nothing to compare and passes
+        sys.exit(f"no port of the post at {port}")
+    drift = prose_drift(port)
     if drift:
         sys.exit("The post's paragraphs and the port's differ; make each edit in both:\n" + "\n".join(drift))
     print("prose: every section's paragraphs match the port's")

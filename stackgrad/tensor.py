@@ -25,7 +25,7 @@ _local = threading.local()  # per thread: the serving engine's no_grad() must no
 def grad_enabled():
     """Whether operations in this thread record a graph for backward (False inside no_grad)."""
     return getattr(_local, "grad_enabled", True)
-_profiler = None  # a minitorch.profile.profile while one is active
+_profiler = None  # a stackgrad.profile.profile while one is active
 _autocast = None  # a dtype name while autocast is active
 
 

@@ -13,7 +13,7 @@ import {
 import { DEVICE_COLOR, DEVICE_NAME, DEVICE_SHORT, endLabel, INK, RULE } from "../chart";
 import { formatNumber, labelOffsets } from "../lib";
 
-export type ParityRow = { step: number; minitorch: number; torch: number; abs_diff: number };
+export type ParityRow = { step: number; stackgrad: number; torch: number; abs_diff: number };
 export type Parity = {
   params: number;
   steps: number;
@@ -42,7 +42,7 @@ export function ParityChart({ p }: { p: Parity }) {
             <YAxis tick={{ fontSize: 12 }} domain={["auto", "auto"]} width={48} />
             <Tooltip formatter={(v) => formatNumber(Number(v), 6)} labelFormatter={(s) => `step ${s}`} />
             <Line dataKey="torch" name="PyTorch" stroke="#a3266f" strokeWidth={5} strokeOpacity={0.35} dot={false} isAnimationActive={false} />
-            <Line dataKey="minitorch" name="minitorch" stroke="#2456b8" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+            <Line dataKey="stackgrad" name="stackgrad" stroke="#2456b8" strokeWidth={1.5} dot={false} isAnimationActive={false} />
           </LineChart>
         </ResponsiveContainer>
       </div>
@@ -52,7 +52,7 @@ export function ParityChart({ p }: { p: Parity }) {
 
 function stepLabel(r: StepRow) {
   const precision = r.precision && r.precision !== "float32" ? `, ${r.precision}` : "";
-  return `${r.impl === "minitorch" ? "minitorch" : r.impl.replace(/ \(.*\)/, "")} on ${DEVICE_NAME[r.device]}${precision}`;
+  return `${r.impl === "stackgrad" ? "stackgrad" : r.impl.replace(/ \(.*\)/, "")} on ${DEVICE_NAME[r.device]}${precision}`;
 }
 
 export function StepBars({ rows }: { rows: StepRow[] }) {
@@ -120,11 +120,11 @@ export function AttentionTable({ rows }: { rows: AttnRow[] }) {
 // phones: no room for end-of-line labels beside the plot, so the legend alone names the lines
 const narrow = () => window.matchMedia("(max-width: 720px)").matches;
 
-const PATHS = ["raw", "sync every op", "minitorch"] as const;
+const PATHS = ["raw", "sync every op", "stackgrad"] as const;
 const PATH_NOTE: Record<(typeof PATHS)[number], string> = {
   raw: "64 chained multiplies on the backend's own arrays, one wait at the end.",
   "sync every op": "The same chain, waiting for the device after every multiply: launch plus round-trip latency.",
-  minitorch: "The same chain through minitorch Tensors, so it adds the framework's Python cost per op.",
+  stackgrad: "The same chain through stackgrad Tensors, so it adds the framework's Python cost per op.",
 };
 
 /** Powers of ten spanning the data, for log axes. */
@@ -135,7 +135,7 @@ function decades(values: number[]) {
 }
 
 export function OpCost({ rows }: { rows: OpRow[] }) {
-  const [path, setPath] = useState<(typeof PATHS)[number]>("minitorch");
+  const [path, setPath] = useState<(typeof PATHS)[number]>("stackgrad");
   const devices = Object.keys(DEVICE_COLOR).filter((d) => rows.some((r) => r.device === d));
   const shown = rows.filter((r) => r.path === path);
   const yTicks = decades(rows.map((r) => r.us_per_op));

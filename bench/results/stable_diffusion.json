@@ -4,7 +4,7 @@
  "guidance": 7.5,
  "size": 512,
  "dtype": "float32",
- "minitorch_metal_s_per_step": 2.579,
+ "stackgrad_metal_s_per_step": 2.579,
  "diffusers_mps_s_per_step": 1.161,
  "max_pixel_gap": 0.0134,
  "mean_pixel_gap": 2e-05,

@@ -1,7 +1,7 @@
 # Loss Functions
 
-::: minitorch.loss.mse_loss
+::: stackgrad.loss.mse_loss
 
-::: minitorch.loss.cross_entropy_loss
+::: stackgrad.loss.cross_entropy_loss
 
-::: minitorch.loss.bce_loss
+::: stackgrad.loss.bce_loss

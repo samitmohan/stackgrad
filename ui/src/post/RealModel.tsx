@@ -8,7 +8,7 @@ export function Qwen() {
     <Section id="qwen" n={8} title="Can it run someone else's model?">
       <p>
         Everything so far used a model I trained myself. A stronger test is someone else's model: its published weights should
-        give the same numbers in minitorch as in the reference library. Qwen3-0.6B <Cite k="qwen3" /> is an open chat model from Alibaba's Qwen team, small
+        give the same numbers in stackgrad as in the reference library. Qwen3-0.6B <Cite k="qwen3" /> is an open chat model from Alibaba's Qwen team, small
         enough to run on a laptop and capable enough to hold a conversation and work through grade-school math.
       </p>
       <p>
@@ -21,7 +21,7 @@ export function Qwen() {
           Qwen ships its weights in <b>bfloat16</b>, a 16-bit number format. A standard 32-bit float spends 1 bit on the
           sign, 8 on the exponent (the scale), and 23 on the mantissa (the digits). bfloat16 keeps the same sign and exponent
           and the first 7 mantissa bits. It covers the same range of sizes with two to three significant digits instead of
-          seven, in half the memory. Because bfloat16 is the first half of a 32-bit float, minitorch converts it by appending 16
+          seven, in half the memory. Because bfloat16 is the first half of a 32-bit float, stackgrad converts it by appending 16
           zero bits, and the conversion loses nothing.
         </p>
       </Aside>
@@ -29,14 +29,14 @@ export function Qwen() {
         Qwen3 is the model of §4 with four settings changed (Table 2). Each head is 128 numbers wide, set apart from the
         model's width. Qwen3 normalizes queries and keys before RoPE, which keeps attention scores in a steady range. The normalization constant is smaller. And the output layer reuses the embedding table instead of a
         separate matrix, which saves {q ? `${((q.config.vocab_size as number) * (q.config.d_model as number) / 1e6).toFixed(0)}M` : "…"}{" "}
-        parameters. The loader maps each of Hugging Face's tensor names to a minitorch parameter and refuses to run if any
+        parameters. The loader maps each of Hugging Face's tensor names to a stackgrad parameter and refuses to run if any
         name or shape fails to match, because a weight that keeps its random starting value without warning produces a model
         that runs and talks nonsense.
       </p>
       {q && (
-        <Fig n={4} table caption={<>minitorch's output scores (logits) for a {q.prompt_tokens}-token prompt against Hugging Face's transformers library, the reference implementation; Qwen3's largest logit is {num(q.largest_logit, 3)}. "Same next token" is how often both pick the same likeliest next token. With greedy decoding, minitorch {q.greedy_match ? "reproduces" : "does not reproduce"} Hugging Face's first {q.greedy_tokens} tokens of Qwen3's text.</>}>
+        <Fig n={4} table caption={<>stackgrad's output scores (logits) for a {q.prompt_tokens}-token prompt against Hugging Face's transformers library, the reference implementation; Qwen3's largest logit is {num(q.largest_logit, 3)}. "Same next token" is how often both pick the same likeliest next token. With greedy decoding, stackgrad {q.greedy_match ? "reproduces" : "does not reproduce"} Hugging Face's first {q.greedy_tokens} tokens of Qwen3's text.</>}>
           <table className="results">
-            <thead><tr><th>Model</th><th>minitorch on</th><th className="num">Largest gap</th><th className="num">Gap relative to the largest logit</th><th className="num">Same next token</th></tr></thead>
+            <thead><tr><th>Model</th><th>stackgrad on</th><th className="num">Largest gap</th><th className="num">Gap relative to the largest logit</th><th className="num">Same next token</th></tr></thead>
             <tbody>
               {q.logits.map((l) => (
                 <tr key={l.device + l.dtype}>
@@ -76,7 +76,7 @@ export function Quantization() {
       </p>
       {qt && row("bfloat16") && row("int4") && (
         <p>
-          <b>Quantization</b> reads fewer bytes. minitorch cuts each row of a weight matrix into groups of 64, keeps a scale and
+          <b>Quantization</b> reads fewer bytes. stackgrad cuts each row of a weight matrix into groups of 64, keeps a scale and
           an offset per group, and rounds every weight to one of <TeX>{String.raw`2^{\text{bits}}`}</TeX> levels; its own Metal
           kernel multiplies against the packed integers and matches MLX's on the same bytes (<code>tests/quant.py</code>).
           Four bits cut the weights read per token from {int(row("bfloat16")!.weight_mb)} MB to {int(row("int4")!.weight_mb)} MB,
@@ -153,7 +153,7 @@ export function Lora() {
         </p>
       )}
       {base ? (
-        <Fig n={5} table caption={<>GSM8K accuracy of Qwen3-0.6B running in minitorch, on the Apple GPU in bfloat16. "Hit the limit" counts replies cut off at 320 tokens.</>}>
+        <Fig n={5} table caption={<>GSM8K accuracy of Qwen3-0.6B running in stackgrad, on the Apple GPU in bfloat16. "Hit the limit" counts replies cut off at 320 tokens.</>}>
           <AccuracyTable rows={[["Qwen3-0.6B as released", base], ["after LoRA on GSM8K", tuned]]} />
         </Fig>
       ) : (
@@ -256,12 +256,12 @@ export function Grpo() {
       <p>
         A reply better than its group's average gets a positive <b>advantage</b> <TeX>A_i</TeX> and becomes likelier, and a
         worse one becomes less likely. A group whose replies all scored the same, all right or all wrong, says nothing about
-        which reply was better: every advantage in it is zero, and minitorch skips those replies in the update. A reply's
+        which reply was better: every advantage in it is zero, and stackgrad skips those replies in the update. A reply's
         log-probabilities are summed and divided by <TeX>B</TeX>, the same 320-token budget for every reply. CS336's version
         divides each reply by its own length <TeX>{String.raw`|o_i|`}</TeX> instead, which, Liu et al. <Cite k="drgrpo" /> point
         out, gives a long wrong reply a smaller push per token than a short one. Their Dr. GRPO drops that division and the one
-        by the standard deviation; minitorch drops only the first. CS336's version also clips how far one update may move a
-        probability, which matters when one batch of replies trains several updates. minitorch makes one update per batch, and
+        by the standard deviation; stackgrad drops only the first. CS336's version also clips how far one update may move a
+        probability, which matters when one batch of replies trains several updates. stackgrad makes one update per batch, and
         there the clipped loss and this one have the same gradient.
       </p>
       <Aside title="Four replies to one question">

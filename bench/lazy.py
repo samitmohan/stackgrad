@@ -1,6 +1,6 @@
 """What lazy tensors cost and skip: one training step of a small story model, lazy against eager.
 
-Eager is minitorch's _apply as it was before tensors were lazy: every op runs the moment it is written. The two
+Eager is stackgrad's _apply as it was before tensors were lazy: every op runs the moment it is written. The two
 alternate within one process, trial by trial, so drift in the machine's speed hits both alike. Also counts the ops a
 step records and the ops it runs (the difference is work no one read), and compares the losses: the largest gap between
 an eager and a lazy run against the largest gap between two eager runs, which is not zero on a GPU that sums in a
@@ -15,11 +15,11 @@ from pathlib import Path
 
 import numpy as np
 
-from minitorch import attention, backend, mlops
-from minitorch import tensor as T
-from minitorch.gpt import TransformerLM
-from minitorch.loss import cross_entropy_loss
-from minitorch.optim import AdamW
+from stackgrad import attention, backend, mlops
+from stackgrad import tensor as T
+from stackgrad.gpt import TransformerLM
+from stackgrad.loss import cross_entropy_loss
+from stackgrad.optim import AdamW
 
 OUT = Path(__file__).resolve().parent / "results" / "lazy.json"
 CONFIG = {"vocab_size": 1000, "context_length": 64, "d_model": 128, "n_layers": 2, "n_heads": 4, "d_ff": 384}

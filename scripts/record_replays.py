@@ -1,6 +1,6 @@
 """Record the post's live figures against a running server, for a static copy of the post that replays them.
 
-Start the server first (uv run uvicorn minitorch.serve.api:app --port 8000), then:
+Start the server first (uv run uvicorn stackgrad.serve.api:app --port 8000), then:
     uv run python scripts/record_replays.py
 Writes bench/replays/<figure>.json. Each request is the one the live figure sends; the chat records when each streamed
 chunk arrived, so a replay can show the reply at the speed it was written.

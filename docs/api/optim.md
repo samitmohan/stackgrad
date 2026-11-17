@@ -2,16 +2,16 @@
 
 ## SGD
 
-::: minitorch.optim.SGD
+::: stackgrad.optim.SGD
 
 ## Adam
 
-::: minitorch.optim.Adam
+::: stackgrad.optim.Adam
 
 ## Gradient clipping
 
-::: minitorch.optim.clip_grad_norm
+::: stackgrad.optim.clip_grad_norm
 
 ## Learning rate schedule
 
-::: minitorch.optim.cosine_lr
+::: stackgrad.optim.cosine_lr

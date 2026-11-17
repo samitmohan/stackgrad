@@ -9,8 +9,8 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from minitorch import AdamW, TransformerLM, cross_entropy_loss, no_grad
-from minitorch.lora import apply_lora, merge_adapter, save_adapter
+from stackgrad import AdamW, TransformerLM, cross_entropy_loss, no_grad
+from stackgrad.lora import apply_lora, merge_adapter, save_adapter
 
 CONFIG = {"vocab_size": 50, "context_length": 16, "d_model": 32, "n_layers": 2, "n_heads": 4, "d_ff": 64, "n_kv_heads": 2}
 

@@ -1,4 +1,4 @@
-"""Stable Diffusion in minitorch (examples/stable_diffusion.py) against transformers and diffusers.
+"""Stable Diffusion in stackgrad (examples/stable_diffusion.py) against transformers and diffusers.
 
     uv run python tests/stable_diffusion.py
 
@@ -27,7 +27,7 @@ from examples.stable_diffusion import (
     load_unet,
     load_vae,
 )
-from minitorch import Tensor, no_grad
+from stackgrad import Tensor, no_grad
 
 PATH = ROOT / "data/sd15"
 PROMPTS = ["a watercolor painting of a lighthouse on a cliff at dusk", "", "A photo of an astronaut riding a horse on Mars!!",

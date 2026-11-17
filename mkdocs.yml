@@ -1,4 +1,4 @@
-site_name: MiniTorch
+site_name: stackgrad
 site_description: A miniature PyTorch-style deep-learning engine built from scratch
 site_author: Samit Mohan
 site_url: https://samitmohan.github.io/minitorch/

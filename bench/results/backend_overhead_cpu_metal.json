@@ -17,7 +17,7 @@
   },
   {
    "device": "cpu",
-   "path": "minitorch",
+   "path": "stackgrad",
    "n": 1000,
    "us_per_op": 3.09
   },
@@ -35,7 +35,7 @@
   },
   {
    "device": "cpu",
-   "path": "minitorch",
+   "path": "stackgrad",
    "n": 10000,
    "us_per_op": 4.08
   },
@@ -53,7 +53,7 @@
   },
   {
    "device": "cpu",
-   "path": "minitorch",
+   "path": "stackgrad",
    "n": 100000,
    "us_per_op": 10.0
   },
@@ -71,7 +71,7 @@
   },
   {
    "device": "cpu",
-   "path": "minitorch",
+   "path": "stackgrad",
    "n": 1000000,
    "us_per_op": 66.91
   },
@@ -89,7 +89,7 @@
   },
   {
    "device": "cpu",
-   "path": "minitorch",
+   "path": "stackgrad",
    "n": 10000000,
    "us_per_op": 863.11
   },
@@ -107,7 +107,7 @@
   },
   {
    "device": "metal",
-   "path": "minitorch",
+   "path": "stackgrad",
    "n": 1000,
    "us_per_op": 7.59
   },
@@ -125,7 +125,7 @@
   },
   {
    "device": "metal",
-   "path": "minitorch",
+   "path": "stackgrad",
    "n": 10000,
    "us_per_op": 7.63
   },
@@ -143,7 +143,7 @@
   },
   {
    "device": "metal",
-   "path": "minitorch",
+   "path": "stackgrad",
    "n": 100000,
    "us_per_op": 8.86
   },
@@ -161,7 +161,7 @@
   },
   {
    "device": "metal",
-   "path": "minitorch",
+   "path": "stackgrad",
    "n": 1000000,
    "us_per_op": 43.62
   },
@@ -179,7 +179,7 @@
   },
   {
    "device": "metal",
-   "path": "minitorch",
+   "path": "stackgrad",
    "n": 10000000,
    "us_per_op": 777.51
   }
@@ -278,7 +278,7 @@
  ],
  "train_step": [
   {
-   "impl": "minitorch",
+   "impl": "stackgrad",
    "device": "cpu",
    "precision": "float32",
    "batch": 32,
@@ -287,7 +287,7 @@
    "tflops": 0.378
   },
   {
-   "impl": "minitorch",
+   "impl": "stackgrad",
    "device": "metal",
    "precision": "float32",
    "batch": 32,

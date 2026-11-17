@@ -1,7 +1,7 @@
 """HTTP API behind the UI: training runs, autograd graphs, BPE traces, gradient checks, generation,
-and an OpenAI-compatible chat endpoint serving Qwen3-0.6B through minitorch's engine.
+and an OpenAI-compatible chat endpoint serving Qwen3-0.6B through stackgrad's engine.
 
-    uv run uvicorn minitorch.serve.api:app --port 8000
+    uv run uvicorn stackgrad.serve.api:app --port 8000
 
 Serves ui/dist at / when it has been built (cd ui && npm run build).
 """
@@ -23,15 +23,15 @@ from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from minitorch import Tensor, TransformerLM, no_grad
-from minitorch.tokenizer import Tokenizer
+from stackgrad import Tensor, TransformerLM, no_grad
+from stackgrad.tokenizer import Tokenizer
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNS = ROOT / "runs"
 IDLE_S = 120  # seconds without a new metrics line before a run counts as finished
 MAX_PROMPT_CHARS = 64_000  # far past what a 4k-token context holds
 EOT = "<|endoftext|>"
-app = FastAPI(title="minitorch")
+app = FastAPI(title="stackgrad")
 # one model call at a time: the endpoints and the chat engine's thread share the loaded models and the device's memory
 _model_lock = threading.Lock()
 
@@ -253,7 +253,7 @@ def generate(req: GenerateRequest):
             "new_tokens": int(ids.shape[1] - len(prompt))}
 
 
-# chat: Qwen3-0.6B on the Apple GPU, through the scheduler and engine (minitorch/serve)
+# chat: Qwen3-0.6B on the Apple GPU, through the scheduler and engine (stackgrad/serve)
 
 QWEN = ROOT / "data" / "Qwen3-0.6B"
 _chat = None
@@ -267,13 +267,13 @@ def _qwen():
         if _chat is None:
             if not QWEN.exists():
                 raise HTTPException(503, "Qwen3-0.6B is not downloaded into data/Qwen3-0.6B")
-            from minitorch.qwen3 import load_qwen3, load_tokenizer
-            from minitorch.serve.engine import Engine
-            from minitorch.serve.kv_cache import BlockManager
-            from minitorch.serve.runner import MinitorchRunner
-            from minitorch.serve.scheduler import Scheduler
+            from stackgrad.qwen3 import load_qwen3, load_tokenizer
+            from stackgrad.serve.engine import Engine
+            from stackgrad.serve.kv_cache import BlockManager
+            from stackgrad.serve.runner import StackgradRunner
+            from stackgrad.serve.scheduler import Scheduler
             model = load_qwen3(QWEN).to("metal", "bfloat16")
-            _chat = load_tokenizer(QWEN), Engine(Scheduler(MinitorchRunner(model), BlockManager(512, 16)), _model_lock)
+            _chat = load_tokenizer(QWEN), Engine(Scheduler(StackgradRunner(model), BlockManager(512, 16)), _model_lock)
     return _chat
 
 
@@ -311,7 +311,7 @@ def _replies(tok, tokens, eos):
 
 @app.post("/v1/chat/completions")
 def chat_completions(req: ChatRequest):
-    from minitorch.qwen3 import chat_prompt
+    from stackgrad.qwen3 import chat_prompt
 
     tok, engine = _qwen()
     text = chat_prompt([m.model_dump() for m in req.messages], tools=req.tools)
@@ -396,7 +396,7 @@ class AskRequest(BaseModel):
 
 def _complete(messages, max_tokens, tools=None):
     """One greedy reply from the chat engine, in process: (text, prompt tokens, reply tokens, seconds)."""
-    from minitorch.qwen3 import chat_prompt
+    from stackgrad.qwen3 import chat_prompt
 
     tok, engine = _qwen()
     prompt = tok.encode(chat_prompt(messages, tools=tools))
@@ -413,9 +413,9 @@ def _complete(messages, max_tokens, tools=None):
 @lru_cache(maxsize=1)
 def _retriever():
     """(tokenizer, Qwen3-Embedding, SQuAD paragraphs, index), loaded on the first question."""
-    # the apps sit on top of minitorch, so they are imported here, not at the top of this module
+    # the apps sit on top of stackgrad, so they are imported here, not at the top of this module
     from apps.rag import EMBEDDER, INDEX, corpus
-    from minitorch.qwen3 import load_qwen3, load_tokenizer
+    from stackgrad.qwen3 import load_qwen3, load_tokenizer
 
     if not INDEX.exists():
         raise HTTPException(503, "no index yet: run uv run python apps/rag.py once to build it")

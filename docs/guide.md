@@ -1,6 +1,6 @@
 # Study plan
 
-minitorch was built in the order you would learn it: a gradient, then a model, then hardware, then a real model,
+stackgrad was built in the order you would learn it: a gradient, then a model, then hardware, then a real model,
 serving, fine-tuning, and applications. This page turns that order into a plan for rebuilding it yourself. The blog
 post explains why each piece exists and what it measured. The code shows how. This page says in what order to take
 them, how to work each piece, and how to think while you do.
@@ -74,7 +74,7 @@ number instead disagreed with exact sampling in 2 of 20,480 draws, against 714 f
 (`bench/results/sampling_cuda.json`).
 
 **Use a large finite number for masks, never minus infinity.** A softmax over a row that is all minus infinity is NaN,
-and NaN times zero is NaN, so one fully masked padding row poisons real rows. minitorch masks with -1e9. The same choice
+and NaN times zero is NaN, so one fully masked padding row poisons real rows. stackgrad masks with -1e9. The same choice
 has a cost worth knowing: near -1e9, float64's spacing is about 1e-7, too coarse for a finite-difference check, so the
 padding gradient test scores only real positions.
 
@@ -97,7 +97,7 @@ the system was swapping. An API server stopped by killing its `uv run` wrapper l
 hours. Before trusting a timing, check swap and what else is running.
 
 **Test the reference before blaming your code.** The agent never called its calculator in 250 problems. Before
-debugging minitorch, the same prompt went through Hugging Face's own model, which ignored the tool too: the prompt said
+debugging stackgrad, the same prompt went through Hugging Face's own model, which ignored the tool too: the prompt said
 "solve it step by step", and the model obeyed that instead. One check against the reference saved a long search.
 
 **Shared state breaks under threads.** `no_grad` began as one process-wide flag. While the chat engine sat inside it,
@@ -115,10 +115,10 @@ where to read further.
 
 ### 1. Autograd (post §2)
 
-Every gradient in minitorch lives in `minitorch/mlops.py`, in nineteen operations with a `forward` and a `backward`.
+Every gradient in stackgrad lives in `stackgrad/mlops.py`, in nineteen operations with a `forward` and a `backward`.
 Everything else composes them.
 
-- Read `minitorch/tensor.py` (the `Tensor`, `_apply`, and `backward`'s walk over the graph), then `minitorch/mlops.py`.
+- Read `stackgrad/tensor.py` (the `Tensor`, `_apply`, and `backward`'s walk over the graph), then `stackgrad/mlops.py`.
 - Rebuild `Add`, `Mul`, `Sum`, `Expand`, `Reshape`, `Matmul`, and `backward()`'s topological walk. Then broadcasting:
   the gradient of a broadcast input sums over the broadcast axes.
 - Check with `uv run python test_grads.py` (finite differences) and `uv run python tests/parity.py` (PyTorch).
@@ -129,7 +129,7 @@ Everything else composes them.
 
 ### 2. Modules, layers, losses, optimizers (post §2 and §4)
 
-- Read `minitorch/module.py`, `layers.py`, `functional.py`, `loss.py`, `optim.py`.
+- Read `stackgrad/module.py`, `layers.py`, `functional.py`, `loss.py`, `optim.py`.
 - Rebuild `Linear`, `LayerNorm`, `RMSNorm`, softmax with the max subtracted, cross-entropy, and AdamW.
 - Check with `uv run python tests/parity.py`.
 - Predict what softmax returns for scores of 1000 and 1001 without subtracting the max, and with it.
@@ -137,7 +137,7 @@ Everything else composes them.
 
 ### 3. Tokenizer (post §3)
 
-- Read `minitorch/tokenizer.py` and `scripts/tinystories.py`.
+- Read `stackgrad/tokenizer.py` and `scripts/tinystories.py`.
 - Rebuild byte-level BPE training: count adjacent pairs, merge the most frequent, update the counts without recounting
   everything. Then `encode` and `decode`.
 - Check with `uv run python tests/tokenizer.py`: GPT-2's merges loaded into your tokenizer must match tiktoken, and
@@ -147,7 +147,7 @@ Everything else composes them.
 
 ### 4. The transformer (post §4)
 
-- Read `minitorch/attention.py` (RoPE, grouped-query attention, the KV cache, the padding mask) and `minitorch/gpt.py`.
+- Read `stackgrad/attention.py` (RoPE, grouped-query attention, the KV cache, the padding mask) and `stackgrad/gpt.py`.
 - Rebuild causal attention from the formula, then RoPE, then a block, then the model.
 - Check with `uv run python test_grads.py` (the attention checks) and `uv run python tests/parity.py`.
 - Predict the story model's parameter count from its configuration: vocabulary 10,000, width 512, 4 layers, feed-forward
@@ -158,7 +158,7 @@ Everything else composes them.
 
 ### 5. Training (post §5, appendix: scaling laws)
 
-- Read `train_gpt.py`, `minitorch/optim.py` (`cosine_lr`, `clip_grad_norm`), and `bench/m1_parity.py`.
+- Read `train_gpt.py`, `stackgrad/optim.py` (`cosine_lr`, `clip_grad_norm`), and `bench/m1_parity.py`.
 - Rebuild the training loop: warmup and cosine schedule, clipping, evaluation, checkpoints.
 - Check with `uv run python bench/m1_parity.py --steps 200` (step-for-step against PyTorch) and
   `uv run python tests/ablations.py`. Then a smoke run:
@@ -169,7 +169,7 @@ Everything else composes them.
 
 ### 6. Backends (post §6, appendix: mixed precision, checkpointing)
 
-- Read `minitorch/backend/cpu.py`, `metal.py`, `cuda.py`, then `minitorch/checkpoint.py` and `autocast` in `tensor.py`.
+- Read `stackgrad/backend/cpu.py`, `metal.py`, `cuda.py`, then `stackgrad/checkpoint.py` and `autocast` in `tensor.py`.
 - Rebuild the MLX backend: most of it is re-exports, and the two places it differs (immutable arrays, lazy evaluation)
   are the lesson.
 - Check with `uv run python tests/backends.py --device metal`, `uv run python tests/mixed_precision.py`, and
@@ -181,8 +181,8 @@ Everything else composes them.
 
 ### 7. Kernels (post §7)
 
-- Read `minitorch/backend/metal_attention.py` (three versions, each fixing the last one's bottleneck),
-  `minitorch/backend/cuda_attention.py` (FlashAttention-2 in Triton), and `minitorch/profile.py`.
+- Read `stackgrad/backend/metal_attention.py` (three versions, each fixing the last one's bottleneck),
+  `stackgrad/backend/cuda_attention.py` (FlashAttention-2 in Triton), and `stackgrad/profile.py`.
 - Rebuild the one-pass softmax on paper first (the post's worked example with scores 1, 3, 2), then kernel v1, then v2.
 - Check with `uv run python tests/backends.py --device metal` (every kernel against a 64-bit reference), then
   `uv run python bench/flash_attention.py` and `uv run python bench/profile_step.py --device metal`.
@@ -193,8 +193,8 @@ Everything else composes them.
 
 ### 8. A real model (post §8, appendix: other models)
 
-- Read `minitorch/state.py` (the safetensors reader), `minitorch/qwen3.py`, then `examples/gpt2.py`.
-- Rebuild the safetensors reader and the name mapping from Hugging Face's tensor names to minitorch's parameters.
+- Read `stackgrad/state.py` (the safetensors reader), `stackgrad/qwen3.py`, then `examples/gpt2.py`.
+- Rebuild the safetensors reader and the name mapping from Hugging Face's tensor names to stackgrad's parameters.
 - Check with `uv run python tests/qwen3.py` and `uv run python tests/gpt2.py`.
 - Predict the bytes of Qwen3-0.6B's weights in bfloat16, and why converting bfloat16 to float32 loses nothing.
 - Read further: the [safetensors format](https://github.com/huggingface/safetensors);
@@ -202,7 +202,7 @@ Everything else composes them.
 
 ### 9. Serving (post §9)
 
-- Read `minitorch/serve/kv_cache.py`, `scheduler.py`, `runner.py`, `engine.py`, then `api.py`'s chat endpoint.
+- Read `stackgrad/serve/kv_cache.py`, `scheduler.py`, `runner.py`, `engine.py`, then `api.py`'s chat endpoint.
 - Rebuild the block manager and continuous batching: admit between steps, release on finish, preempt the newest when
   blocks run out.
 - Check with `uv run python tests/serve.py`: every request must get the tokens it would get running alone.
@@ -213,7 +213,7 @@ Everything else composes them.
 
 ### 10. Decoding faster (post §10, appendix: decoding speed-ups)
 
-- Read `minitorch/quant.py`, `minitorch/backend/metal_quant.py`, `minitorch/sampling.py`, `minitorch/speculative.py`.
+- Read `stackgrad/quant.py`, `stackgrad/backend/metal_quant.py`, `stackgrad/sampling.py`, `stackgrad/speculative.py`.
 - Rebuild group-wise quantization, then speculative decoding's acceptance rule.
 - Check with `uv run python tests/quant.py` and `uv run python tests/speculative.py`.
 - Predict the decode speedup from int4 if weight bytes were the whole cost, then compare with
@@ -223,7 +223,7 @@ Everything else composes them.
 
 ### 11. LoRA (post §11)
 
-- Read `minitorch/lora.py`, `train_lora.py`, `bench/gsm8k.py`.
+- Read `stackgrad/lora.py`, `train_lora.py`, `bench/gsm8k.py`.
 - Rebuild `LoRALinear`, merging, and the masked loss over the solution tokens.
 - Check with `uv run python tests/lora.py`.
 - Predict LoRA's trainable parameter count for Qwen3-0.6B at rank 16 across its seven matrices per layer.
@@ -241,7 +241,7 @@ Everything else composes them.
 
 ### 13. Retrieval and an agent (post §13)
 
-- Read `apps/rag.py`, `apps/agent.py`, and the `/api/rag` and `/api/agent` endpoints in `minitorch/serve/api.py`.
+- Read `apps/rag.py`, `apps/agent.py`, and the `/api/rag` and `/api/agent` endpoints in `stackgrad/serve/api.py`.
 - Rebuild the embedder's pooling, the index, the search, and the tool loop. Rebuild the calculator last, and make it
   parse, never execute.
 - Check with `uv run python tests/agent.py`, then run both apps against the server

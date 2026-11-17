@@ -1,9 +1,9 @@
-"""Stable Diffusion in minitorch against diffusers on the same Mac: speed per step, and how far apart the images land.
+"""Stable Diffusion in stackgrad against diffusers on the same Mac: speed per step, and how far apart the images land.
 
     uv run python bench/stable_diffusion.py
 
 Both pipelines turn the same prompt and the same starting noise into a 512x512 image with 25 DDIM
-steps and guidance 7.5, in float32 on the Apple GPU: minitorch through MLX, diffusers through
+steps and guidance 7.5, in float32 on the Apple GPU: stackgrad through MLX, diffusers through
 PyTorch's MPS backend. They run one after the other, so only one sits in memory. A step is one
 UNet call on the prompt and the empty prompt together, timed until the GPU finishes. Writes
 bench/results/stable_diffusion.json and both images, then profiles one UNet call op by op.
@@ -27,8 +27,8 @@ from transformers import CLIPTextModel, CLIPTokenizer
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from examples.stable_diffusion import generate, load_unet
-from minitorch import Tensor, backend, no_grad
-from minitorch.profile import profile
+from stackgrad import Tensor, backend, no_grad
+from stackgrad.profile import profile
 
 PATH = ROOT / "data/sd15"
 RESULTS = ROOT / "bench/results"
@@ -75,12 +75,12 @@ def main():
     mine, mine_s = generate(PATH, PROMPT, noise, STEPS, GUIDANCE, "metal")
     backend.get("metal").clear_cache()  # hand MLX's cached buffers back before PyTorch loads its copy
     ref, ref_s = diffusers_generate(noise)
-    for name, image in (("minitorch", mine), ("diffusers", ref)):
+    for name, image in (("stackgrad", mine), ("diffusers", ref)):
         Image.fromarray((image * 255).round().astype(np.uint8)).save(RESULTS / f"stable_diffusion_{name}.png")
     unet_profile = profile_unet()
     gap = np.abs(mine - ref)
     result = {"prompt": PROMPT, "steps": STEPS, "guidance": GUIDANCE, "size": SIZE, "dtype": "float32",
-              "minitorch_metal_s_per_step": round(float(np.median(mine_s)), 3),
+              "stackgrad_metal_s_per_step": round(float(np.median(mine_s)), 3),
               "diffusers_mps_s_per_step": round(float(np.median(ref_s)), 3),
               "max_pixel_gap": round(float(gap.max()), 4), "mean_pixel_gap": round(float(gap.mean()), 5),
               "pixels_off_by_more_than_1_of_255": round(float((gap > 1 / 255).mean()), 5), "unet_profile": unet_profile}

@@ -45,7 +45,7 @@ export type Quant = {
 
 export type Sd = {
   prompt: string; steps: number; guidance: number; size: number;
-  minitorch_metal_s_per_step: number; diffusers_mps_s_per_step: number;
+  stackgrad_metal_s_per_step: number; diffusers_mps_s_per_step: number;
   max_pixel_gap: number; mean_pixel_gap: number; pixels_off_by_more_than_1_of_255: number;
   unet_profile: { wall_ms: number; rows: { op: string; calls: number; ms: number }[] };
 };
@@ -148,11 +148,11 @@ export function useResults() {
       runDone: cfg !== undefined && ts.length > 0 && ts[ts.length - 1].step === cfg.steps,
       tsParams,
       tsTokens: cfg ? cfg.steps * cfg.batch * cfg.context : undefined,
-      opNumpy: op(ovM, "cpu", "minitorch"), opMlx: op(ovM, "metal", "minitorch"), opCupy: op(ovC, "cuda", "minitorch"),
+      opNumpy: op(ovM, "cpu", "stackgrad"), opMlx: op(ovM, "metal", "stackgrad"), opCupy: op(ovC, "cuda", "stackgrad"),
       syncMlx: op(ovM, "metal", "sync every op"), syncCupy: op(ovC, "cuda", "sync every op"),
-      bigNumpy: op(ovM, "cpu", "minitorch", 1e7), bigMlx: op(ovM, "metal", "minitorch", 1e7), bigCupy: op(ovC, "cuda", "minitorch", 1e7),
-      mlxShare: ratio(step("minitorch", "metal")?.tokens_per_s, step("plain MLX", "metal")?.tokens_per_s),
-      cudaVsCpu: ratio(step("minitorch", "cuda")?.tokens_per_s, step("minitorch", "cpu")?.tokens_per_s),
+      bigNumpy: op(ovM, "cpu", "stackgrad", 1e7), bigMlx: op(ovM, "metal", "stackgrad", 1e7), bigCupy: op(ovC, "cuda", "stackgrad", 1e7),
+      mlxShare: ratio(step("stackgrad", "metal")?.tokens_per_s, step("plain MLX", "metal")?.tokens_per_s),
+      cudaVsCpu: ratio(step("stackgrad", "cuda")?.tokens_per_s, step("stackgrad", "cpu")?.tokens_per_s),
       peakMatmul: (device: string, dtype = "float32") => {
         const t = [...(ovM?.matmul ?? []), ...(ovC?.matmul ?? [])].filter((r) => r.device === device && r.dtype === dtype).map((r) => r.tflops);
         return t.length ? Math.max(...t) : undefined;  // no result file yet: "…", not 0 TFLOP/s
@@ -211,7 +211,7 @@ export const REFS = [
   { k: "cupy", text: "R. Okuta et al. CuPy: A NumPy-Compatible Library for NVIDIA GPU Calculations. LearningSys 2017.", url: "https://github.com/cupy/cupy" },
 ] as const;
 
-/** A result file in minitorch's bench/results, the data behind a measurement the post states in one line. */
+/** A result file in stackgrad's bench/results, the data behind a measurement the post states in one line. */
 export function Res({ f }: { f: string }) {
   return <a href={`https://github.com/samitmohan/minitorch/blob/master/bench/results/${f}`}><code>{f}</code></a>;
 }

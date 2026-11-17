@@ -17,7 +17,7 @@ from ..attention import KVCache
 from ..tensor import Tensor, no_grad
 
 
-class MinitorchRunner:
+class StackgradRunner:
     def __init__(self, model):
         self.model = model
         self.context_length = model.context_length

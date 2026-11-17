@@ -1,4 +1,4 @@
-"""Mixed precision (minitorch.autocast): 16-bit multiplies, float32 weights and gradients, nearly the same numbers.
+"""Mixed precision (stackgrad.autocast): 16-bit multiplies, float32 weights and gradients, nearly the same numbers.
 
     uv run python tests/mixed_precision.py
 """
@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from minitorch import LossScaler, Tensor, TransformerLM, autocast, cross_entropy_loss
+from stackgrad import LossScaler, Tensor, TransformerLM, autocast, cross_entropy_loss
 
 
 def main():

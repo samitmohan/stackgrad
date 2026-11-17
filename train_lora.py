@@ -16,9 +16,9 @@ from pathlib import Path
 import numpy as np
 
 from bench.gsm8k import PROMPT
-from minitorch import AdamW, clip_grad_norm, cosine_lr, cross_entropy_loss
-from minitorch.lora import apply_lora, save_adapter
-from minitorch.qwen3 import chat_prompt, load_qwen3, load_tokenizer
+from stackgrad import AdamW, clip_grad_norm, cosine_lr, cross_entropy_loss
+from stackgrad.lora import apply_lora, save_adapter
+from stackgrad.qwen3 import chat_prompt, load_qwen3, load_tokenizer
 
 
 def examples(tok, path):

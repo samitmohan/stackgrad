@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Parity check: every minitorch op and layer against its PyTorch twin, outputs and grads, fp32.
+"""Parity check: every stackgrad op and layer against its PyTorch twin, outputs and grads, fp32.
 
     uv run python tests/parity.py
 
@@ -12,8 +12,8 @@ import numpy as np
 import torch
 import torch.nn.functional as TF
 
-import minitorch as mt
-from minitorch import functional as F
+import stackgrad as mt
+from stackgrad import functional as F
 
 ATOL, RTOL = 1e-5, 1e-4
 CHECKS = []
@@ -52,7 +52,7 @@ def r(*shape):
 
 
 def twin(p):
-    """A torch leaf holding a copy of minitorch param p."""
+    """A torch leaf holding a copy of stackgrad param p."""
     return torch.tensor(p.data.copy(), requires_grad=True)
 
 
@@ -211,7 +211,7 @@ def _():
 
 @check("Attention without the causal mask vs torch SDPA")
 def _():
-    from minitorch.attention import scaled_dot_product_attention
+    from stackgrad.attention import scaled_dot_product_attention
     compare(lambda q, k, v: scaled_dot_product_attention(q, k, v, causal=False),
             lambda q, k, v: TF.scaled_dot_product_attention(q, k, v), r(2, 4, 6, 8), r(2, 4, 9, 8), r(2, 4, 9, 8))
 
@@ -272,7 +272,7 @@ def _():
 
 @check("sampling: greedy, top_k=1, tiny top_p all pick argmax")
 def _():
-    from minitorch.sampling import sample
+    from stackgrad.sampling import sample
     logits = r(4, 50)
     best = logits.argmax(-1)
     assert (sample(logits, temperature=0) == best).all()
@@ -282,7 +282,7 @@ def _():
 
 @check("sampling: top_p keeps the nucleus a full sort keeps, so draws match it id for id")
 def _():
-    from minitorch.sampling import sample
+    from stackgrad.sampling import sample
     logits = r(64, 3000) * 4
     probs = np.exp(logits - logits.max(-1, keepdims=True))
     probs /= probs.sum(-1, keepdims=True)
@@ -301,7 +301,7 @@ def _():
 
 @check("sampling on the device: greedy picks argmax, and draws follow softmax(logits / T)")
 def _():
-    from minitorch.sampling import sample_on_device
+    from stackgrad.sampling import sample_on_device
     logits = r(4, 50)
     assert (sample_on_device(mt.Tensor(logits), temperature=0) == logits.argmax(-1)).all()
     p = np.array([0.1, 0.2, 0.3, 0.4])

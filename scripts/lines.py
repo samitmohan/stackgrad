@@ -1,4 +1,4 @@
-"""How big minitorch is: lines per component, the way tinygrad and nanoGPT state their size.
+"""How big stackgrad is: lines per component, the way tinygrad and nanoGPT state their size.
 
     uv run python scripts/lines.py      # writes bench/results/lines.json
 
@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-PKG = ROOT / "minitorch"
+PKG = ROOT / "stackgrad"
 GROUPS = {
     "engine": [PKG / f for f in ["__init__.py", "tensor.py", "mlops.py", "module.py", "layers.py", "functional.py", "loss.py",
                                  "optim.py", "conv.py", "data.py", "grad_check.py", "checkpoint.py", "profile.py"]],
@@ -41,7 +41,7 @@ def main():
     (ROOT / "bench/results/lines.json").write_text(json.dumps(result, indent=1))
     for g in groups:
         print(f"{g['name']:36s} {g['files']:3d} files {g['lines']:6,d} lines")
-    print(f"{'minitorch package':36s} {result['package']:16,d} lines\n{'whole repository':36s} {result['repository']:16,d} lines")
+    print(f"{'stackgrad package':36s} {result['package']:16,d} lines\n{'whole repository':36s} {result['repository']:16,d} lines")
 
 
 if __name__ == "__main__":

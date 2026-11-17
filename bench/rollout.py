@@ -17,10 +17,10 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from bench.gsm8k import PROMPT
-from minitorch import backend, no_grad
-from minitorch.attention import KVCache
-from minitorch.qwen3 import chat_prompt, load_qwen3, load_tokenizer
-from minitorch.sampling import sample, sample_on_device
+from stackgrad import backend, no_grad
+from stackgrad.attention import KVCache
+from stackgrad.qwen3 import chat_prompt, load_qwen3, load_tokenizer
+from stackgrad.sampling import sample, sample_on_device
 from train_grpo import load_questions
 
 RESULTS = Path(__file__).resolve().parent / "results"

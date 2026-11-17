@@ -1,4 +1,4 @@
-# minitorch: SPEC
+# stackgrad: SPEC
 
 ## Goal
 
@@ -39,7 +39,7 @@ the previous result left open and ends on a measured answer. Story order:
   safetensors parser, sampling, Metal kernels, LoRA, quantization, KV cache manager,
   scheduler, engine, server, RAG pipeline, agent loop.
 - What I borrow: NumPy/MLX arrays and kernel launch, HF checkpoints (weights only),
-  FastAPI for HTTP parsing. The retrieval embeddings run in minitorch too (Qwen3-Embedding-0.6B
+  FastAPI for HTTP parsing. The retrieval embeddings run in stackgrad too (Qwen3-Embedding-0.6B
   is Qwen3's architecture, 2026-11-05). `mx.fast.*` and PyTorch serve as test oracles only,
   never in the product path.
 - Tensors are lazy (2026-11-06): writing an op records it, and it runs when its result is read (`.data`,
@@ -58,7 +58,7 @@ the previous result left open and ends on a measured answer. Story order:
 ## Milestones
 
 **M1. Core, tokenizer, GPT** (study Phase 1: CS336, nanoGPT)
-- Every gradient moves into `minitorch/mlops.py` (about 20 primitives).
+- Every gradient moves into `stackgrad/mlops.py` (about 20 primitives).
 - RMSNorm, RoPE, GQA with KV cache, SwiGLU, AdamW, cosine warmup.
 - Byte-level BPE tokenizer (CS336 A1).
 - `tests/parity.py`: every layer against its torch twin, outputs and grads.
@@ -66,9 +66,9 @@ the previous result left open and ends on a measured answer. Story order:
   the PyTorch version with the same seed, and BPE round-trips a held-out file.
 
 **M2. Metal kernels + start serving** (study Phase 2: optimisation)
-- `minitorch/backend/{cpu,metal,cuda}.py`, `device="metal"` / `"cuda"`, bf16 on metal.
+- `stackgrad/backend/{cpu,metal,cuda}.py`, `device="metal"` / `"cuda"`, bf16 on metal.
 - FlashAttention forward via `mx.fast.metal_kernel`.
-- Side track: tinyserve's `KVCacheManager` and `Scheduler`, built against minitorch's own
+- Side track: tinyserve's `KVCacheManager` and `Scheduler`, built against stackgrad's own
   TransformerLM instead of PyTorch MPS (decided 2026-11-05: an HF model keeps its own KV
   cache, so it cannot exercise the block tables). The torch runner moves to M3 as the Qwen3 oracle.
 - Done when: MNIST and the GPT on Metal match NumPy within 1e-4, a kernel table lists
@@ -83,8 +83,8 @@ the previous result left open and ends on a measured answer. Story order:
 - Done when: logits match HF within tolerance, LoRA shows a measured eval gain, and a
   perplexity table covers bf16 / int8 / int4.
 
-**M4. The engine runs on minitorch** (study Phase 4: inference)
-- Swap torch for minitorch in `ModelRunner`.
+**M4. The engine runs on stackgrad** (study Phase 4: inference)
+- Swap torch for stackgrad in `ModelRunner`.
 - Paged decode-attention kernel that reads K/V through the block table. Without it,
   every decode step gathers the KV blocks into a contiguous copy.
 - Batched decode across prompt lengths, built for GRPO (2026-11-05): left padding plus a key
@@ -109,7 +109,7 @@ the previous result left open and ends on a measured answer. Story order:
   calculator parses expressions and never executes model text (tests/agent.py). Scored on the
   same 250-problem protocol as bench/gsm8k.py.
 - RAG (apps/rag.py, 2026-11-05): SQuAD v1.1 dev, 2,067 paragraphs embedded by Qwen3-Embedding-0.6B
-  in minitorch (last-token pooling, matches HF to 5.5e-5), a NumPy dot-product index, and the
+  in stackgrad (last-token pooling, matches HF to 5.5e-5), a NumPy dot-product index, and the
   server answering closed-book vs with the top 3 paragraphs; recall@k, exact match, and F1.
 - Per-request latency tracing: each app records every model call's time and prompt/reply tokens.
 - Done when: the RAG eval and the agent task are scored and their time breakdowns are in the post.
@@ -129,7 +129,7 @@ the previous result left open and ends on a measured answer. Story order:
   on the CuPy path (against the Metal and composed versions). Cut 2026-11-05: distributed
   data parallel, optimizer state sharding, and FSDP (both models fit one 3090).
 - A3: scaling laws fit from my own grid of small runs on bqa3 (Stanford's API is students-only).
-- A5: GRPO on GSM8K with Qwen3-0.6B (train_grpo.py), rollouts from minitorch's batched
+- A5: GRPO on GSM8K with Qwen3-0.6B (train_grpo.py), rollouts from stackgrad's batched
   generate; its variants (RFT, Dr. GRPO) as time allows. A4 (data filtering) is out.
   Decided 2026-11-05: start from the released model (60.8%), not the LoRA one (49.2%); train a
   LoRA adapter (rank 16, lr 1e-4, 10x CS336's full fine-tuning rate per "LoRA Without Regret");
@@ -147,7 +147,7 @@ the previous result left open and ends on a measured answer. Story order:
 SDXL. Llama 3 dropped 2026-11-05, user decision)
 - One file each, like tinygrad's `examples/`: `examples/gpt2.py` and
   `examples/stable_diffusion.py`. Each loads the published weights through `state.py` and runs
-  on minitorch's backends.
+  on stackgrad's backends.
 - GPT-2 (124M): LayerNorm, learned positions, GELU, biases; logit parity against HF.
   Done 2026-11-05: examples/gpt2.py, tests/gpt2.py (CPU 7.0e-7, Metal 1.1e-6 of the largest logit;
   40 greedy tokens match).
@@ -171,5 +171,5 @@ SDXL. Llama 3 dropped 2026-11-05, user decision)
 ## Open items
 
 - Study plan: done 2026-11-06, `docs/guide.md` (replaced `docs/reading-guide.md`).
-- Rename: "minitorch" collides with Cornell's minitorch course and an existing PyPI
-  package.
+- Rename: done 2026-11-17, minitorch is now stackgrad (the old name collided with Cornell's
+  minitorch course and an existing PyPI package).

@@ -38,7 +38,7 @@ _SOURCE = """
     }
 """
 
-_KERNEL = mx.fast.metal_kernel(name="minitorch_quant_matmul", input_names=["x", "w", "scales", "biases"],
+_KERNEL = mx.fast.metal_kernel(name="stackgrad_quant_matmul", input_names=["x", "w", "scales", "biases"],
                                output_names=["out"], source=_SOURCE)
 
 

@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "minitorch"
+name = "stackgrad"
 version = "0.2.0"
 description = "A miniature PyTorch-like autograd engine built from scratch"
 authors = [{name = "Samit Mohan"}]

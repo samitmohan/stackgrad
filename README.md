@@ -1,10 +1,10 @@
-# minitorch
+# stackgrad
 
 [![CI](https://github.com/samitmohan/minitorch/actions/workflows/ci.yml/badge.svg)](https://github.com/samitmohan/minitorch/actions/workflows/ci.yml)
 
 A deep learning framework written from scratch, and the stack on top of it: from a single derivative to a server that
 answers questions from Wikipedia and runs a tool-using agent. Reverse-mode autodiff with every gradient in one file
-(`minitorch/mlops.py`), three array backends (NumPy, Apple's GPU through MLX, NVIDIA's through CuPy), attention kernels
+(`stackgrad/mlops.py`), three array backends (NumPy, Apple's GPU through MLX, NVIDIA's through CuPy), attention kernels
 in Metal and Triton, a BPE tokenizer, a language model trained from nothing, Qwen3-0.6B loaded and served behind an
 OpenAI-style endpoint, LoRA and GRPO fine-tuning, and retrieval-augmented generation and an agent on that server.
 PyTorch, tiktoken, and transformers appear only in the tests, as the references each piece is checked against.
@@ -12,9 +12,9 @@ PyTorch, tiktoken, and transformers appear only in the tests, as the references 
 The write-up is [Modern AI: Autograd to Agents](https://samitmohan.in/blog/minitorch), one post in paper form that
 explains each piece from first principles and ends each section on a measured number.
 
-![minitorch and PyTorch loss curves overlapping over 200 steps, and the per-step gap](bench/results/m1_parity_f64.png)
+![stackgrad and PyTorch loss curves overlapping over 200 steps, and the per-step gap](bench/results/m1_parity_f64.png)
 
-minitorch and PyTorch train the same 8.3M-parameter model from the same weights on the same batches, in float64. At
+stackgrad and PyTorch train the same 8.3M-parameter model from the same weights on the same batches, in float64. At
 step 1 their losses differ by 1.8e-15 (`bench/m1_parity.py --float64`).
 
 ## Results
@@ -32,7 +32,7 @@ Every number comes from a file the named script writes.
 
 Also measured: at the training shape, where each attention head is 32 numbers wide and MLX has no fused kernel, the
 Metal attention kernel runs 6.7x faster than MLX; at Qwen3's 128-wide heads, MLX's fused kernel runs 2.6x faster than
-minitorch's (`bench/flash_attention.py`). FlashAttention-2 in Triton runs forward and backward 8.5x faster than the
+stackgrad's (`bench/flash_attention.py`). FlashAttention-2 in Triton runs forward and backward 8.5x faster than the
 composed version on the RTX 3090 (`bench/flash_attention_cuda.py`).
 
 What did not work, on 250 GSM8K problems (greedy, thinking off, 320 new tokens), against the released model's 152:
@@ -56,12 +56,12 @@ uv run python test_grads.py                 # every gradient against finite diff
 uv run python tests/parity.py               # every op and layer against PyTorch
 ```
 
-Chat with Qwen3-0.6B running on minitorch, through the OpenAI-style endpoint. The first request loads the weights (23 s
+Chat with Qwen3-0.6B running on stackgrad, through the OpenAI-style endpoint. The first request loads the weights (23 s
 on an M4, reply included); `"stream": true` returns server-sent events the way OpenAI's API does.
 
 ```bash
 uv run hf download Qwen/Qwen3-0.6B --local-dir data/Qwen3-0.6B
-uv run uvicorn minitorch.serve.api:app --port 8000
+uv run uvicorn stackgrad.serve.api:app --port 8000
 
 # in another terminal
 curl localhost:8000/v1/chat/completions -H 'Content-Type: application/json' \
@@ -72,7 +72,7 @@ curl localhost:8000/v1/chat/completions -H 'Content-Type: application/json' \
 ## Layout
 
 ```
-minitorch/        the framework: tensor.py and mlops.py (autograd), backend/ (NumPy, MLX, CuPy, Metal and Triton
+stackgrad/        the framework: tensor.py and mlops.py (autograd), backend/ (NumPy, MLX, CuPy, Metal and Triton
                   kernels), layers, optimizers, attention, gpt.py, qwen3.py, tokenizer.py, lora.py, quant.py, serve/
 apps/             rag.py and agent.py, clients of the server
 train_*.py        TinyStories pretraining, LoRA, GRPO
@@ -90,7 +90,7 @@ uv run python train_gpt.py --run smoke --steps 300 --d-model 128 --layers 2 --he
 uv run python scripts/lines.py              # the size row above
 
 cd ui && npm install && npm run build && cd ..
-uv run uvicorn minitorch.serve.api:app --port 8000   # the write-up with live figures, at http://localhost:8000
+uv run uvicorn stackgrad.serve.api:app --port 8000   # the write-up with live figures, at http://localhost:8000
 
 uv run --extra docs mkdocs serve            # the study plan (docs/guide.md) and the API reference
 ```

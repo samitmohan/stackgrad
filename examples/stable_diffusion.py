@@ -1,4 +1,4 @@
-"""Stable Diffusion v1.5 in minitorch: a 512x512 image from a sentence, loaded from the diffusers checkpoint.
+"""Stable Diffusion v1.5 in stackgrad: a 512x512 image from a sentence, loaded from the diffusers checkpoint.
 
     uv run python examples/stable_diffusion.py --device metal --prompt "a watercolor of a lighthouse at dusk"
 
@@ -26,14 +26,14 @@ import numpy as np
 import regex
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from minitorch import Tensor, backend, cat, no_grad, where
-from minitorch.attention import scaled_dot_product_attention
-from minitorch.conv import Conv2d
-from minitorch.functional import silu
-from minitorch.layers import Dropout, Embedding, GroupNorm, LayerNorm, Linear
-from minitorch.module import Module
-from minitorch.state import iter_safetensors
-from minitorch.tokenizer import bytes_to_unicode
+from stackgrad import Tensor, backend, cat, no_grad, where
+from stackgrad.attention import scaled_dot_product_attention
+from stackgrad.conv import Conv2d
+from stackgrad.functional import silu
+from stackgrad.layers import Dropout, Embedding, GroupNorm, LayerNorm, Linear
+from stackgrad.module import Module
+from stackgrad.state import iter_safetensors
+from stackgrad.tokenizer import bytes_to_unicode
 
 LATENT_SCALE = 0.18215  # the VAE's scaling_factor: latents are trained at roughly unit variance after it
 

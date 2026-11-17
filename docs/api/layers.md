@@ -1,46 +1,46 @@
 # Layers
 
 Every layer subclasses `Module`. Activations are also available as plain
-functions under `minitorch.functional` (aliased as `F`).
+functions under `stackgrad.functional` (aliased as `F`).
 
 ## Linear
 
-::: minitorch.layers.Linear
+::: stackgrad.layers.Linear
 
 ## Activations
 
-::: minitorch.layers.ReLU
+::: stackgrad.layers.ReLU
 
-::: minitorch.layers.GELU
+::: stackgrad.layers.GELU
 
-::: minitorch.layers.Sigmoid
+::: stackgrad.layers.Sigmoid
 
-::: minitorch.layers.Tanh
+::: stackgrad.layers.Tanh
 
-::: minitorch.layers.Softmax
+::: stackgrad.layers.Softmax
 
 ## Normalization and regularization
 
-::: minitorch.layers.BatchNorm1d
+::: stackgrad.layers.BatchNorm1d
 
-::: minitorch.layers.LayerNorm
+::: stackgrad.layers.LayerNorm
 
-::: minitorch.layers.Dropout
+::: stackgrad.layers.Dropout
 
 ## Embedding
 
-::: minitorch.layers.Embedding
+::: stackgrad.layers.Embedding
 
 ## Convolution
 
-::: minitorch.conv.Conv2d
+::: stackgrad.conv.Conv2d
 
-::: minitorch.conv.MaxPool2d
+::: stackgrad.conv.MaxPool2d
 
-::: minitorch.conv.Flatten
+::: stackgrad.conv.Flatten
 
 ## Functional
 
-::: minitorch.functional
+::: stackgrad.functional
     options:
       members: [relu, gelu, sigmoid, tanh, softmax, log_softmax]

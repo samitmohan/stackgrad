@@ -1,6 +1,6 @@
 """The serving engine: a background thread runs the scheduler, and each request's tokens stream back through a queue.
 
-    engine = Engine(Scheduler(MinitorchRunner(model), BlockManager(512)), lock)
+    engine = Engine(Scheduler(StackgradRunner(model), BlockManager(512)), lock)
     tokens = engine.submit(prompt_ids, max_tokens=200, eos_id=eos)   # a queue.Queue
     for token in iter(tokens.get, None): ...
 

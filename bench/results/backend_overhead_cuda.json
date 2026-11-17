@@ -17,7 +17,7 @@
   },
   {
    "device": "cuda",
-   "path": "minitorch",
+   "path": "stackgrad",
    "n": 1000,
    "us_per_op": 41.89
   },
@@ -35,7 +35,7 @@
   },
   {
    "device": "cuda",
-   "path": "minitorch",
+   "path": "stackgrad",
    "n": 10000,
    "us_per_op": 39.48
   },
@@ -53,7 +53,7 @@
   },
   {
    "device": "cuda",
-   "path": "minitorch",
+   "path": "stackgrad",
    "n": 100000,
    "us_per_op": 39.54
   },
@@ -71,7 +71,7 @@
   },
   {
    "device": "cuda",
-   "path": "minitorch",
+   "path": "stackgrad",
    "n": 1000000,
    "us_per_op": 39.96
   },
@@ -89,7 +89,7 @@
   },
   {
    "device": "cuda",
-   "path": "minitorch",
+   "path": "stackgrad",
    "n": 10000000,
    "us_per_op": 99.69
   }
@@ -128,7 +128,7 @@
  ],
  "train_step": [
   {
-   "impl": "minitorch",
+   "impl": "stackgrad",
    "device": "cuda",
    "precision": "tf32",
    "batch": 32,

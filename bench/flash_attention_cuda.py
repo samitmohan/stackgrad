@@ -17,8 +17,8 @@ import cupy as cp
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from minitorch import Tensor, mlops
-from minitorch.backend import cuda
+from stackgrad import Tensor, mlops
+from stackgrad.backend import cuda
 
 RESULTS = Path(__file__).resolve().parent / "results"
 SHAPES = [  # name, B, H, Hkv, T, S, D

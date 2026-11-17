@@ -1,3 +1,3 @@
 # DataLoader
 
-::: minitorch.data.DataLoader
+::: stackgrad.data.DataLoader

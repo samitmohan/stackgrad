@@ -48,7 +48,7 @@ class QuantLinear(Module):
     def __init__(self, weight, bits, group):
         super().__init__()
         xp = backend.get(weight.device)
-        packed, scales, biases = quantize(weight.numpy().T, bits, group)  # minitorch keeps (in, out)
+        packed, scales, biases = quantize(weight.numpy().T, bits, group)  # stackgrad keeps (in, out)
         self.device, self.bits, self.group = weight.device, bits, group
         self.packed = xp.asarray(packed)
         self.scales, self.biases = xp.asarray(scales, dtype=weight.dtype), xp.asarray(biases, dtype=weight.dtype)

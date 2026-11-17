@@ -4,14 +4,14 @@ The core array type and the autograd engine. Arithmetic operators (`+`, `-`,
 `*`, `/`, `**`, `@`) are overloaded and differentiable; the named methods below
 cover reductions, shape ops, and elementwise math.
 
-::: minitorch.tensor.Tensor
+::: stackgrad.tensor.Tensor
 
 ## no_grad
 
-::: minitorch.tensor.no_grad
+::: stackgrad.tensor.no_grad
 
 ## Free functions
 
-::: minitorch.tensor.cat
+::: stackgrad.tensor.cat
 
-::: minitorch.tensor.stack
+::: stackgrad.tensor.stack

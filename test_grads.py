@@ -10,7 +10,7 @@ one from .backward(). Exits nonzero if any gradient is wrong.
 """
 import numpy as np
 
-from minitorch import (
+from stackgrad import (
     Attention,
     BatchNorm1d,
     Conv2d,
@@ -29,9 +29,9 @@ from minitorch import (
     stack,
     where,
 )
-from minitorch import functional as F
-from minitorch.grad_check import check_gradient
-from minitorch.layers import DepthAttention
+from stackgrad import functional as F
+from stackgrad.grad_check import check_gradient
+from stackgrad.layers import DepthAttention
 
 
 def randt(*shape, positive=False):
@@ -355,7 +355,7 @@ def _():
     # the key mask every GRPO update backpropagates through: batch row 1's first two positions are padding. The loss
     # covers real positions only, as every training loss here does; a padding query's scores sit near -1e9, where
     # float64's spacing (~1e-7) is too coarse for a finite difference, and its output is never used
-    from minitorch.attention import scaled_dot_product_attention
+    from stackgrad.attention import scaled_dot_product_attention
     q, k, v = randt(2, 2, 4, 4), randt(2, 2, 4, 4), randt(2, 2, 4, 4)
     real = np.ones((2, 1, 4, 1))
     real[1, :, :2] = 0
@@ -365,7 +365,7 @@ def _():
 @check("attention-cached-keys")
 def _():
     # decoding: 2 new queries against 5 keys, so the causal mask is offset by S - T
-    from minitorch.attention import scaled_dot_product_attention
+    from stackgrad.attention import scaled_dot_product_attention
     q, k, v = randt(1, 2, 2, 4), randt(1, 2, 5, 4), randt(1, 2, 5, 4)
     check_gradient(lambda: (scaled_dot_product_attention(q, k, v) ** 2).sum(), [q, k, v])
 
@@ -373,14 +373,14 @@ def _():
 @check("attention-non-causal")
 def _():
     # cross-attention, as Stable Diffusion's UNet uses it: every query sees all 6 keys
-    from minitorch.attention import scaled_dot_product_attention
+    from stackgrad.attention import scaled_dot_product_attention
     q, k, v = randt(1, 2, 3, 4), randt(1, 2, 6, 4), randt(1, 2, 6, 4)
     check_gradient(lambda: (scaled_dot_product_attention(q, k, v, causal=False) ** 2).sum(), [q, k, v])
 
 
 @check("lora-linear")
 def _():
-    from minitorch.lora import LoRALinear
+    from stackgrad.lora import LoRALinear
     layer = LoRALinear(Linear(5, 3, bias=False), r=2, alpha=4)
     layer.B.data = np.random.randn(2, 3)  # B starts at zero, which would hide a wrong gradient for A
     x = randt(2, 4, 5)

@@ -1,4 +1,4 @@
-"""Speculative decoding on the Apple GPU: Qwen3-0.6B drafts for Qwen3-1.7B (minitorch/speculative.py).
+"""Speculative decoding on the Apple GPU: Qwen3-0.6B drafts for Qwen3-1.7B (stackgrad/speculative.py).
 
     uv run python bench/speculative.py
 
@@ -17,8 +17,8 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from bench.gsm8k import PROMPT
-from minitorch.qwen3 import chat_prompt, load_qwen3, load_tokenizer
-from minitorch.speculative import speculative_generate
+from stackgrad.qwen3 import chat_prompt, load_qwen3, load_tokenizer
+from stackgrad.speculative import speculative_generate
 
 RESULTS = Path(__file__).resolve().parent / "results"
 MAX_NEW = 128

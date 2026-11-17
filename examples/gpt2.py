@@ -1,4 +1,4 @@
-"""GPT-2 in minitorch: OpenAI's 124M-parameter model from 2019, loaded from Hugging Face.
+"""GPT-2 in stackgrad: OpenAI's 124M-parameter model from 2019, loaded from Hugging Face.
 
     uv run python examples/gpt2.py
     uv run python examples/gpt2.py --device metal --prompt "The meaning of life is"
@@ -18,14 +18,14 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from minitorch import no_grad
-from minitorch.attention import KVCache, scaled_dot_product_attention
-from minitorch.functional import gelu
-from minitorch.layers import Embedding, LayerNorm, Linear
-from minitorch.module import Module
-from minitorch.sampling import sample_on_device
-from minitorch.state import load_safetensors
-from minitorch.tokenizer import Tokenizer
+from stackgrad import no_grad
+from stackgrad.attention import KVCache, scaled_dot_product_attention
+from stackgrad.functional import gelu
+from stackgrad.layers import Embedding, LayerNorm, Linear
+from stackgrad.module import Module
+from stackgrad.sampling import sample_on_device
+from stackgrad.state import load_safetensors
+from stackgrad.tokenizer import Tokenizer
 
 
 class Attention(Module):

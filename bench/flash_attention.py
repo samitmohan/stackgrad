@@ -18,7 +18,7 @@ import mlx.core as mx
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from minitorch.backend.metal_attention import attention
+from stackgrad.backend.metal_attention import attention
 
 RESULTS = Path(__file__).resolve().parent / "results"
 SHAPES = [  # name, B, H, Hkv, T, S, D

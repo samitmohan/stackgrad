@@ -21,7 +21,7 @@ export function Tokens() {
         one token each, and rare words get a few.
       </p>
       <p>
-        minitorch's tokenizer uses <b>byte-level byte-pair encoding</b> <Cite k="bpe" /> <Cite k="gpt2" />, the scheme behind
+        stackgrad's tokenizer uses <b>byte-level byte-pair encoding</b> <Cite k="bpe" /> <Cite k="gpt2" />, the scheme behind
         GPT-2, GPT-4, and Qwen. It starts from bytes. Text in any language, emoji included, is a sequence of UTF-8 bytes, and
         only 256 different bytes exist, so no input is unknown. Then it learns <b>merges</b>. It finds the pair of adjacent
         symbols that occurs most often in the training text, adds that pair to the vocabulary as a new symbol, and repeats
@@ -38,9 +38,9 @@ export function Tokens() {
         </p>
       </Aside>
       <p>
-        Encoding new text replays the merges in training order. minitorch adds two refinements. First, a regular expression
+        Encoding new text replays the merges in training order. stackgrad adds two refinements. First, a regular expression
         cuts the text into words, numbers, and punctuation before any merging, so a merge never spans two words, and{" "}
-        <i>dog</i> in "dog." and "dog!" becomes the same token. Second, for speed, minitorch counts word frequencies in
+        <i>dog</i> in "dog." and "dog!" becomes the same token. Second, for speed, stackgrad counts word frequencies in
         parallel across the processor's cores, and after each merge it recounts pairs in the words that contained the merged
         pair instead of rescanning the whole corpus.
       </p>
@@ -98,7 +98,7 @@ export function Model() {
         and does arithmetic by repeating that step.
       </p>
       <p>
-        minitorch's model is a <b>decoder-only transformer</b> <Cite k="transformer" />, the architecture behind GPT, Llama,
+        stackgrad's model is a <b>decoder-only transformer</b> <Cite k="transformer" />, the architecture behind GPT, Llama,
         and Qwen, in the modern form taught in Stanford's CS336 <Cite k="cs336" />. Follow one token through it.
       </p>
       <p>
@@ -147,7 +147,7 @@ export function Model() {
         RMSNorm <Cite k="rmsnorm" /> version divides by the root mean square and multiplies by learned gains <TeX>g</TeX>:
       </p>
       <TeX block>{String.raw`\operatorname{RMSNorm}(x) = \frac{x}{\sqrt{\tfrac{1}{d}\sum_i x_i^2 + \epsilon}} \odot g, \qquad \operatorname{FFN}(x) = W_2\big(\operatorname{SiLU}(W_1 x) \odot W_3 x\big)`}</TeX>
-      <p>In code, a whole layer is two lines (<code>minitorch/gpt.py</code>):</p>
+      <p>In code, a whole layer is two lines (<code>stackgrad/gpt.py</code>):</p>
       <pre className="code-block">{`def forward(self, x, cache=None, pad=None):
     x = x + self.attn(self.attn_norm(x), cache, pad)   # attention, added to the residual stream
     return x + self.ffn(self.ffn_norm(x))              # feed-forward, added the same way`}</pre>
@@ -155,7 +155,7 @@ export function Model() {
         <b>Output.</b> After the last layer, one more normalization, then a multiplication by a matrix with one row per
         vocabulary entry, gives a score per token, the <b>logit</b>. Softmax turns the logits into the probabilities we started
         with. Table 2 lists the two configurations this post uses: the small story model, and Qwen3-0.6B (§8), which
-        is the same design with four settings changed, so one class in minitorch covers both.
+        is the same design with four settings changed, so one class in stackgrad covers both.
       </p>
       <Fig n={2} table caption="The two models in this post. The parameter count is the number of adjustable numbers.">
         <table className="results">
@@ -230,7 +230,7 @@ export function Training() {
       <p>
         The full run used Stanford CS336's configuration: the {r.tsParams ? `${(r.tsParams / 1e6).toFixed(1)}M` : "…"}-parameter
         model of Table 2, {r.tsTokens ? `${(r.tsTokens / 1e6).toFixed(1)}M` : "…"} tokens in all, learning rate {c?.lr ?? "…"},
-        weight decay {c?.weight_decay ?? "…"}, on one {r.ovC?.gpu ?? "…"} through minitorch's CuPy backend (§6). Figure 7
+        weight decay {c?.weight_decay ?? "…"}, on one {r.ovC?.gpu ?? "…"} through stackgrad's CuPy backend (§6). Figure 7
         shows its loss curves.
       </p>
       <Fig n={7} caption={<>The TinyStories run, from <code>runs/tinystories</code>: train loss in blue, validation loss in pink, on a log scale. {r.runDone ? <>The TinyStories run ends at a validation loss of {num(r.finalVal)}, a perplexity of {num(r.finalVal !== undefined ? Math.exp(r.finalVal) : undefined, 3)}.</> : null}</>}>
@@ -254,7 +254,7 @@ export function Training() {
         take the likeliest. Top-p keeps the smallest set of likeliest tokens whose probabilities add up to p, which cuts off
         the long tail of unlikely tokens. Figure 8 samples stories at different temperatures.
       </p>
-      <Fig n={8} caption="Generate from a trained checkpoint, live. The server runs minitorch's model with a key-value cache (§9) on the CPU; generated text follows the prompt in plain type.">
+      <Fig n={8} caption="Generate from a trained checkpoint, live. The server runs stackgrad's model with a key-value cache (§9) on the CPU; generated text follows the prompt in plain type.">
         <Generate />
       </Fig>
       {base && post && silu && nope && noNorm && (

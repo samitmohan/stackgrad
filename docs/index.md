@@ -1,4 +1,4 @@
-# minitorch
+# stackgrad
 
 A deep learning framework written from scratch in Python: an autograd engine with every gradient in
 one file, three array backends (NumPy, Apple's GPU through MLX, NVIDIA's through CuPy), and custom
@@ -7,7 +7,7 @@ fine-tunes it with LoRA and GRPO, and runs retrieval and a tool-using agent on i
 
 - The results, written up as one paper: [Modern AI: Autograd to Agents](https://samitmohan.in/blog/minitorch).
   For the version with live figures, run the server
-  (`uv run uvicorn minitorch.serve.api:app --port 8000` after `cd ui && npm run build`) and open
+  (`uv run uvicorn stackgrad.serve.api:app --port 8000` after `cd ui && npm run build`) and open
   `http://localhost:8000`.
 - The headline numbers and how to reproduce them: the repository's README.
 - The study plan for rebuilding it yourself, stage by stage: the Study plan page.

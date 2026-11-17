@@ -51,7 +51,7 @@
   },
   {
    "matrix": "output head",
-   "impl": "int8 minitorch",
+   "impl": "int8 stackgrad",
    "us": 1820.1,
    "gb_s": 90.8
   },
@@ -63,7 +63,7 @@
   },
   {
    "matrix": "output head",
-   "impl": "int4 minitorch",
+   "impl": "int4 stackgrad",
    "us": 888.3,
    "gb_s": 98.5
   },
@@ -81,7 +81,7 @@
   },
   {
    "matrix": "feed-forward up",
-   "impl": "int8 minitorch",
+   "impl": "int8 stackgrad",
    "us": 38.7,
    "gb_s": 86.4
   },
@@ -93,7 +93,7 @@
   },
   {
    "matrix": "feed-forward up",
-   "impl": "int4 minitorch",
+   "impl": "int4 stackgrad",
    "us": 23.7,
    "gb_s": 74.6
   },
@@ -111,7 +111,7 @@
   },
   {
    "matrix": "feed-forward down",
-   "impl": "int8 minitorch",
+   "impl": "int8 stackgrad",
    "us": 34.1,
    "gb_s": 98.1
   },
@@ -123,7 +123,7 @@
   },
   {
    "matrix": "feed-forward down",
-   "impl": "int4 minitorch",
+   "impl": "int4 stackgrad",
    "us": 23.9,
    "gb_s": 74.1
   },

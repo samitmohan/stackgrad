@@ -15,8 +15,8 @@ import sys
 
 import numpy as np
 
-from minitorch import TransformerLM, mlops
-from minitorch.tensor import Tensor, where
+from stackgrad import TransformerLM, mlops
+from stackgrad.tensor import Tensor, where
 
 RAN = []
 for name, fn in inspect.getmembers(mlops, inspect.isclass):

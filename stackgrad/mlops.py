@@ -1,4 +1,4 @@
-"""Every gradient in minitorch, in one file.
+"""Every gradient in stackgrad, in one file.
 
 Each Function is one primitive op. `forward` computes the result from raw backend
 arrays and saves what the gradient needs. `backward` takes the gradient of the

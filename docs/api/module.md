@@ -3,7 +3,7 @@
 Subclass `Module`, assign layers as attributes, and implement `forward`:
 
 ```python
-from minitorch import Module, Linear, ReLU
+from stackgrad import Module, Linear, ReLU
 
 class MyModel(Module):
     def __init__(self):
@@ -16,6 +16,6 @@ class MyModel(Module):
         return self.fc2(self.relu(self.fc1(x)))
 ```
 
-::: minitorch.module.Module
+::: stackgrad.module.Module
 
-::: minitorch.module.Sequential
+::: stackgrad.module.Sequential

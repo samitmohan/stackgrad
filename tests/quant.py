@@ -14,9 +14,9 @@ import mlx.core as mx
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from minitorch import Tensor, no_grad
-from minitorch.backend.metal_quant import quant_matmul
-from minitorch.quant import QuantLinear, dequantize, quantize
+from stackgrad import Tensor, no_grad
+from stackgrad.backend.metal_quant import quant_matmul
+from stackgrad.quant import QuantLinear, dequantize, quantize
 
 
 def main():
@@ -46,7 +46,7 @@ def main():
                 assert rel < (2e-2 if dtype == mx.bfloat16 else 1e-5), (bits, dtype, m, rel)
     print(f"[ok]   Metal kernel matches mx.quantized_matmul (largest relative gap {worst:.1e}, bfloat16 included)")
 
-    weight = Tensor(w.T)  # minitorch's (in, out)
+    weight = Tensor(w.T)  # stackgrad's (in, out)
     layers = {"cpu": QuantLinear(weight, 4, 64), "metal": QuantLinear(weight.to("metal"), 4, 64)}
     for rows in (1, 20):  # 1 takes the Metal kernel, 20 the dequantize-then-matmul path
         x = rng.standard_normal((rows, 256)).astype(np.float32)

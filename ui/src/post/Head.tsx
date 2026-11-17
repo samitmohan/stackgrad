@@ -12,7 +12,7 @@ export function Head() {
     <>
       <header className="paper-title">
         <div className="col">
-          <p className="kicker">minitorch:</p>
+          <p className="kicker">stackgrad:</p>
           <h1>Deep learning framework from scratch</h1>
         </div>
       </header>
@@ -42,14 +42,14 @@ export function Tldr() {
   return (
     <div className="tldr">
       <p>
-        minitorch is a deep learning framework written from scratch in {int(r.lines?.package)} lines of Python, built in the
+        stackgrad is a deep learning framework written from scratch in {int(r.lines?.package)} lines of Python, built in the
         order a study plan would take: reverse-mode automatic differentiation, a transformer trained from nothing, GPU backends
         and attention kernels, a real pretrained model, a server, fine-tuning, and on top of it all the two applications
         most language-model systems exist for, retrieval-augmented generation and a tool-using agent. Each layer is checked
         against a reference. The gradients match PyTorch's to {sci(r.p64?.rows[0].abs_diff)}; a{" "}
         {r.tsParams ? `${(r.tsParams / 1e6).toFixed(1)}M` : "…"}-parameter model trains on TinyStories to a validation loss of{" "}
         {num(r.finalVal)} in {num(r.minutes, 2)} minutes on one {r.ovC?.gpu?.replace("NVIDIA GeForce ", "") ?? "…"}; and Qwen3-0.6B's
-        logits match Hugging Face's to {sci(r.qwenCpu?.max_gap)}. Through minitorch's own server, retrieval puts the paragraph
+        logits match Hugging Face's to {sci(r.qwenCpu?.max_gap)}. Through stackgrad's own server, retrieval puts the paragraph
         a SQuAD question was written from among its top three {r.rag ? pct(r.rag.recall_at_3, 1) : "…"} of the time, and{" "}
         {r.rag ? pct(r.rag.rag_contains, 0) : "…"} of answers then contain the reference.
         {r.gsmBase && r.gsmLora && r.gsmGrpo && r.agent && r.vsLora && r.vsGrpo && r.vsAgent && (
@@ -73,7 +73,7 @@ export function Teaser() {
     return RULE;
   };
   return (
-    <Fig n={1} caption={<>Three results, each read live from the project's result files. Left: minitorch (thin blue) and PyTorch (wide pink) train the same model and their losses overlap step for step. Middle: the story model's validation loss over {int(r.cfg?.steps)} training steps. Right: time to compute attention at the training shape, shorter is faster: my kernel in blue, MLX's in pink (it has no fused kernel for heads this narrow), earlier attempts in gray.</>}>
+    <Fig n={1} caption={<>Three results, each read live from the project's result files. Left: stackgrad (thin blue) and PyTorch (wide pink) train the same model and their losses overlap step for step. Middle: the story model's validation loss over {int(r.cfg?.steps)} training steps. Right: time to compute attention at the training shape, shorter is faster: my kernel in blue, MLX's in pink (it has no fused kernel for heads this narrow), earlier attempts in gray.</>}>
       <div className="teaser">
         <div>
           <div className="spark">
@@ -81,7 +81,7 @@ export function Teaser() {
               <ResponsiveContainer>
                 <LineChart data={r.p64.rows} margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
                   <Line dataKey="torch" stroke={GRAD} strokeWidth={5} strokeOpacity={0.35} dot={false} isAnimationActive={false} />
-                  <Line dataKey="minitorch" stroke={FWD} strokeWidth={1.5} dot={false} isAnimationActive={false} />
+                  <Line dataKey="stackgrad" stroke={FWD} strokeWidth={1.5} dot={false} isAnimationActive={false} />
                 </LineChart>
               </ResponsiveContainer>
             )}

@@ -1,10 +1,10 @@
-"""Qwen3-0.6B in minitorch against Hugging Face transformers (the oracle), from the same checkpoint.
+"""Qwen3-0.6B in stackgrad against Hugging Face transformers (the oracle), from the same checkpoint.
 
-    uv run python tests/qwen3.py            # needs data/Qwen3-0.6B (see minitorch/qwen3.py)
+    uv run python tests/qwen3.py            # needs data/Qwen3-0.6B (see stackgrad/qwen3.py)
 
-1. Logits for a prompt: minitorch float32 on NumPy and on Metal against HF float32 on CPU,
-   then minitorch bfloat16 on Metal (looser; the gap is printed).
-2. Greedy decoding through minitorch's KV cache picks the same 24 tokens as HF's generate.
+1. Logits for a prompt: stackgrad float32 on NumPy and on Metal against HF float32 on CPU,
+   then stackgrad bfloat16 on Metal (looser; the gap is printed).
+2. Greedy decoding through stackgrad's KV cache picks the same 24 tokens as HF's generate.
 """
 import json
 import sys
@@ -15,8 +15,8 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from minitorch import no_grad
-from minitorch.qwen3 import config, load_qwen3
+from stackgrad import no_grad
+from stackgrad.qwen3 import config, load_qwen3
 
 PATH = "data/Qwen3-0.6B"
 PROMPT = "The derivative of x^3 is 3x^2 because the power rule says"

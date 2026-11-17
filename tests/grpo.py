@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from minitorch import SGD, TransformerLM, no_grad
+from stackgrad import SGD, TransformerLM, no_grad
 from train_grpo import group_advantages, policy_loss, reward
 from train_lora import make_batch, reply_loss
 
