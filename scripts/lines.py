@@ -1,4 +1,5 @@
 import json
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -32,10 +33,14 @@ def main():
     assert not missing, f"package files in no group: {missing}"  # a new module must be counted somewhere
     by_name = {g["name"]: g["lines"] for g in groups}
     result = {"groups": groups, "package": sum(by_name[n] for n in PACKAGE), "repository": sum(by_name.values())}
-    (ROOT / "bench/results/lines.json").write_text(json.dumps(result, indent=1))
     for g in groups:
         print(f"{g['name']:36s} {g['files']:3d} files {g['lines']:6,d} lines")
     print(f"{'stackgrad package':36s} {result['package']:16,d} lines\n{'whole repository':36s} {result['repository']:16,d} lines")
+    if "--max" in sys.argv:  # CI: check the budget, leave lines.json (the post's number) alone
+        budget = int(sys.argv[sys.argv.index("--max") + 1])
+        assert result["package"] <= budget, f"stackgrad/ is {result['package']} lines, over its budget of {budget}"
+        return
+    (ROOT / "bench/results/lines.json").write_text(json.dumps(result, indent=1))
 
 
 if __name__ == "__main__":

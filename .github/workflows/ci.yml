@@ -13,6 +13,8 @@ jobs:
       - run: uv sync --group dev --extra serve
       - name: Lint
         run: uv run ruff check stackgrad tests bench scripts examples apps train_gpt.py train_lora.py train_grpo.py test_grads.py
+      - name: Line count (stackgrad/ stays under its budget)
+        run: uv run python scripts/lines.py --max 3000
       - name: Gradient checks (finite differences)
         run: uv run python test_grads.py
       - name: PyTorch parity (ops, layers, attention, optimizers)

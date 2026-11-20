@@ -54,6 +54,12 @@
   options or abstractions, and every deliberate limit marked
   `# shortcut: <the limit>, <when to upgrade>`. Milestone checkpoints get a
   ponytail-review pass (correct, safe, holds under load, tested, fast, lean).
+- Code style is tinygrad's (user, 2026-11-20): 2-space indent and 150-column lines (ruff `indent-width`,
+  `line-length`), no module docstrings, one-line docstrings on public API only (mkdocstrings renders them), and a
+  comment only for a non-obvious why. The README and the mkdocs site follow tinygrad's layout (github.com/tinygrad/tinygrad,
+  docs.tinygrad.org). Hotz's rules apply (user, 2026-11-20, antoinebuteau.com/lessons-from-george-hotz): every line is a
+  maintenance cost, keep refactoring toward simpler, no boilerplate or abstraction that makes simple work harder, and
+  read and correct every generated line. CI fails when the package outgrows its line budget (`scripts/lines.py --max`).
 - No code golf (tinygrad's rule, adopted 2026-11-05). Low line count guides the project, but
   the goal is less complexity and more readability. In the UI, `npm run lint` (oxlint, config
   `ui/.oxlintrc.json`) bans the comma operator, `cond && f()` as a statement, and nested
