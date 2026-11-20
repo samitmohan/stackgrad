@@ -56,7 +56,6 @@ __all__ = [
 ]
 
 
-
 def clear_cache():
     cp.get_default_memory_pool().free_all_blocks()
 

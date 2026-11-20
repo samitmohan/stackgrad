@@ -58,9 +58,6 @@ class MaxPool2d(Module):
 
 class Flatten(Module):
     """Flatten all dims except the batch dim into one."""
-    def __init__(self):
-        super().__init__()
-
     def forward(self, x):
         batch_size = x.shape[0]
         return x.reshape(batch_size, -1)

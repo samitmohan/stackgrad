@@ -6,12 +6,12 @@ import numpy as np
 from . import backend, mlops
 
 _local = threading.local()  # thread-local: the serving engine's no_grad() must not freeze other threads' graphs
+_profiler = None
+_autocast = None
 
 
 def grad_enabled():
     return getattr(_local, "grad_enabled", True)
-_profiler = None
-_autocast = None
 
 
 class no_grad:
