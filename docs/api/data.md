@@ -1,3 +1,0 @@
-# DataLoader
-
-::: stackgrad.data.DataLoader

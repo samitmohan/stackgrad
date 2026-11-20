@@ -1,14 +1,46 @@
-# stackgrad
+# stackgrad documentation
 
-A deep learning framework written from scratch in Python: an autograd engine with every gradient in
-one file, three array backends (NumPy, Apple's GPU through MLX, NVIDIA's through CuPy), and custom
-attention kernels in Metal and Triton. It trains a language model, loads and serves Qwen3-0.6B,
-fine-tunes it with LoRA and GRPO, and runs retrieval and a tool-using agent on its own server.
+stackgrad is a deep learning framework written from scratch, with everything built on it up to serving Qwen3-0.6B to a
+retrieval app and a tool-using agent. This page is for users of the library. Install from source:
 
-- The results, written up as one paper: [Modern AI: Autograd to Agents](https://samitmohan.in/blog/minitorch).
-  For the version with live figures, run the server
-  (`uv run uvicorn stackgrad.serve.api:app --port 8000` after `cd ui && npm run build`) and open
-  `http://localhost:8000`.
-- The headline numbers and how to reproduce them: the repository's README.
-- The study plan for rebuilding it yourself, stage by stage: the Study plan page.
-- The API reference: the pages in the menu.
+```bash
+git clone https://github.com/samitmohan/minitorch.git
+cd minitorch
+uv sync --extra metal    # Apple silicon; NVIDIA: uv sync --extra cuda --no-dev
+```
+
+Then try the [quickstart](quickstart.md). The write-up, [Modern AI: Autograd to Agents](https://samitmohan.in/blog/minitorch),
+explains each piece from first principles and measures it.
+
+## stackgrad Usage
+
+The main class you will use is [Tensor](tensor/index.md). It works like PyTorch's. All operations are lazy: they do
+nothing until you read the result.
+
+* stackgrad has a [neural network library](nn.md) with layers, losses, optimizers, and load/save.
+* stackgrad runs on three [backends](runtime.md): NumPy, MLX on Apple's GPU, and CuPy on NVIDIA's, with attention
+  kernels written in Metal and Triton.
+* To see what training looks like, read `train_gpt.py`.
+
+## Differences from PyTorch
+
+### stackgrad is lazy
+
+`a + b` records an op and returns a tensor that knows its shape and dtype but holds no numbers. Reading `.data`,
+`.numpy()`, `.item()`, calling `.backward()`, or calling [`realize`](tensor/properties.md#stackgrad.tensor.Tensor.realize)
+runs every recorded op the result depends on, once each.
+
+### every gradient lives in one file
+
+`stackgrad/mlops.py` defines 20 primitives (Add, Mul, Matmul, Sum, Reshape, Where, and the rest), each with a forward
+and a backward. Every other op composes them: `relu` is a `Less` and a `Where`, so it never defines a gradient.
+
+### devices are strings
+
+A tensor lives on `"cpu"`, `"metal"`, or `"cuda"`. Pass `device=` to `Tensor`, or move a model with `model.to("metal")`.
+
+### Tensor wraps arrays
+
+There are no factory methods like `torch.zeros`. Build the array in NumPy and wrap it: `Tensor(np.zeros((2, 3)))`.
+Float arrays keep their dtype; ints, bools, and Python numbers become float32. `.grad` holds a backend array, not a
+Tensor.

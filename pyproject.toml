@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "stackgrad"
 version = "0.2.0"
-description = "A miniature PyTorch-like autograd engine built from scratch"
+description = "A deep learning framework written from scratch, up to a served Qwen3 with retrieval and a tool-using agent"
 authors = [{name = "Samit Mohan"}]
 requires-python = ">=3.10"
 dependencies = [
@@ -19,7 +19,6 @@ cuda = ["cupy-cuda13x[ctk]", "triton; sys_platform == 'linux'"]
 serve = ["fastapi", "uvicorn"]
 docs = [
     "mkdocs-material",
-    "mkdocs-git-revision-date-localized-plugin",
     "mkdocstrings[python]",
 ]
 

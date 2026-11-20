@@ -1,28 +1,59 @@
-site_name: stackgrad
-site_description: A miniature PyTorch-style deep-learning engine built from scratch
-site_author: Samit Mohan
+# uv run --extra docs mkdocs serve
+site_name: stackgrad docs
 site_url: https://samitmohan.github.io/minitorch/
-
-repo_url: https://github.com/samitmohan/minitorch
-repo_name: samitmohan/minitorch 
-edit_uri: edit/master/docs 
-
+repo_url: https://github.com/samitmohan/minitorch/
+edit_uri: edit/master/docs
 nav:
-  - Home: index.md
+- Home:
+  - index.md
+  - Quickstart: quickstart.md
+  - Showcase: showcase.md
   - Study plan: guide.md
   - API Reference:
-      - Tensor: api/tensor.md
-      - Module: api/module.md
-      - Layers: api/layers.md
-      - Loss Functions: api/loss.md
-      - Optimizers: api/optim.md
-      - DataLoader: api/data.md
-      - Gradient Checking: api/grad_check.md
+    - Tensor:
+      - tensor/index.md
+      - Properties: tensor/properties.md
+      - Movement: tensor/movement.md
+      - Elementwise: tensor/elementwise.md
+      - Reduce and Autograd: tensor/ops.md
+    - nn (Neural Networks): nn.md
+    - Runtime: runtime.md
+  - Developer: developer.md
+
+validation:
+  links:
+    anchors: warn
+
+markdown_extensions:
+- attr_list
+- admonition
+- pymdownx.highlight:
+    pygments_lang_class: true
+- pymdownx.inlinehilite
+- pymdownx.superfences
+- toc:
+    permalink: "¤"
 
 theme:
   name: material
+  favicon: assets/favicon.ico
+  features:
+  - content.action.edit
+  - content.code.copy
+  - navigation.footer
+  - navigation.indexes
+  - navigation.sections
+  - navigation.expand
+  - navigation.top
+  - navigation.path
+  - search.highlight
+  - search.suggest
+  - toc.follow
+  - toc.integrate
   palette:
     - media: "(prefers-color-scheme)"
+      accent: lime
+      primary: black
       toggle:
         icon: material/brightness-auto
         name: Switch to light mode
@@ -40,94 +71,22 @@ theme:
       toggle:
         icon: material/brightness-4
         name: Switch to system preference
-        
-  font:
-    text: Roboto
-    code: Roboto Mono
-    
-  features:
-    - announce.dismiss
-    - content.action.edit
-    - content.action.view
-    - content.code.annotate
-    - content.code.copy
-    - content.tooltips
-    - navigation.footer
-    - navigation.indexes
-    - navigation.sections
-    - navigation.expand
-    - navigation.top
-    - navigation.path
-    - search.highlight
-    - search.suggest
-    - toc.follow
-    - toc.integrate
-    - search.share 
-    
-  icon:
-    repo: fontawesome/brands/github
-    
-  favicon: assets/favicon.ico
-
 plugins:
-  - search:
-      separator: '[\s\-,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;|(?!\b)(?=[A-Z][a-z])'
-  - git-revision-date-localized:
-      enable_creation_date: true
-      type: timeago
-  - mkdocstrings:
-      handlers:
-        python:
-          paths: [.]
-          options:
-            show_root_heading: true
-            show_root_full_path: false
-            show_source: true
-            show_symbol_type_heading: true
-            show_symbol_type_toc: true
-            separate_signature: true
-            show_signature_annotations: false
-            merge_init_into_class: true
-            docstring_style: google
-            members_order: source
-            filters: ["!^_"]
-            heading_level: 2
-
-markdown_extensions:
-  - attr_list
-  - admonition
-  - footnotes
-  - md_in_html
-  - toc:
-      permalink: "¤"
-  - pymdownx.details
-  - pymdownx.emoji:
-      emoji_index: !!python/name:material.extensions.emoji.twemoji
-      emoji_generator: !!python/name:material.extensions.emoji.to_svg
-  - pymdownx.highlight:
-      pygments_lang_class: true
-      anchor_linenums: true
-      line_spans: __span
-  - pymdownx.inlinehilite
-  - pymdownx.magiclink
-  - pymdownx.snippets:
-      check_paths: true
-  - pymdownx.superfences:
-      custom_fences:
-        - name: mermaid
-          class: mermaid
-          format: !!python/name:pymdownx.superfences.fence_code_format
-  - pymdownx.tabbed:
-      alternate_style: true
-  - pymdownx.tasklist:
-      custom_checkbox: true
-  - pymdownx.tilde
-
-extra:
-  social:
-    - icon: fontawesome/brands/github
-      link: https://github.com/samitmohan
-  generator: false  
-
-copyright: |
-  &copy; 2025 <a href="https://github.com/samitmohan" target="_blank" rel="noopener">Samit Mohan</a>
+- search
+- mkdocstrings:
+    handlers:
+      python:
+        paths: [.]
+        options:
+          docstring_section_style: list
+          filters: ["!^_"]
+          heading_level: 3
+          inherited_members: false
+          merge_init_into_class: true
+          separate_signature: true
+          show_root_heading: true
+          show_root_full_path: false
+          show_symbol_type_heading: true
+          show_symbol_type_toc: true
+          show_source: true
+          summary: true
