@@ -34,3 +34,6 @@ Thumbs.db
 data/
 runs/
 *.safetensors
+*.tsbuildinfo
+drafts/karpathy/*.html
+!drafts/karpathy/template.html
