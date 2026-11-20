@@ -36,7 +36,8 @@ markdown_extensions:
 
 theme:
   name: material
-  favicon: assets/favicon.ico
+  logo: logo_dark.svg
+  favicon: favicon.svg
   features:
   - content.action.edit
   - content.code.copy

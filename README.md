@@ -1,6 +1,9 @@
 <div align="center">
 
-<h1>stackgrad</h1>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="/docs/logo_dark.svg">
+  <img alt="stackgrad" src="/docs/logo_light.svg" width="50%" height="50%">
+</picture>
 
 stackgrad: A deep learning framework written from scratch, up to a served Qwen3 with retrieval and a tool-using agent.
 
