@@ -4,7 +4,7 @@ Things stackgrad runs. Every number below comes from a file the named script wri
 
 ## Qwen3-0.6B chat
 
-![Qwen3-0.6B streaming a worked answer through stackgrad's chat endpoint](https://raw.githubusercontent.com/samitmohan/minitorch/master/assets/chat.gif)
+![Qwen3-0.6B streaming a worked answer through stackgrad's chat endpoint](https://raw.githubusercontent.com/samitmohan/stackgrad/master/assets/chat.gif)
 
 Qwen3-0.6B on stackgrad's own engine and server on an M4, recorded in real time: the first token after 0.09 s, then 25.2
 tokens per second. Its logits match Hugging Face's to 5.1e-5 in float32, and greedy decoding reproduces its first 24
@@ -31,7 +31,7 @@ CUPY_TF32=1 uv run --no-dev python train_gpt.py --run tinystories --device cuda
 
 ## Training beside PyTorch
 
-![stackgrad and PyTorch loss curves overlapping over 200 steps](https://raw.githubusercontent.com/samitmohan/minitorch/master/bench/results/m1_parity_f64.png)
+![stackgrad and PyTorch loss curves overlapping over 200 steps](https://raw.githubusercontent.com/samitmohan/stackgrad/master/bench/results/m1_parity_f64.png)
 
 stackgrad and PyTorch train the same 8.3M-parameter model from the same weights on the same batches, in float64. At step
 1 their losses differ by 1.8e-15.
@@ -42,7 +42,7 @@ uv run python bench/m1_parity.py --float64
 
 ## Stable Diffusion
 
-![A 512x512 image from Stable Diffusion v1.5 running on stackgrad](https://raw.githubusercontent.com/samitmohan/minitorch/master/bench/results/stable_diffusion_stackgrad.png)
+![A 512x512 image from Stable Diffusion v1.5 running on stackgrad](https://raw.githubusercontent.com/samitmohan/stackgrad/master/bench/results/stable_diffusion_stackgrad.png)
 
 Stable Diffusion v1.5 in one file, like tinygrad's: CLIP's text encoder, the UNet stepping through DDIM, and the VAE
 decoder. `tests/stable_diffusion.py` checks each network against diffusers.

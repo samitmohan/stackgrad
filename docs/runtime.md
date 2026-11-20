@@ -4,9 +4,9 @@ stackgrad supports three backends. A tensor's `device` names one.
 
 | Device | Backend | Kernels | Install |
 |--------|---------|---------|---------|
-| [cpu](https://github.com/samitmohan/minitorch/tree/master/stackgrad/backend/cpu.py) | NumPy, the reference every other backend is checked against | none | `uv sync` |
-| [metal](https://github.com/samitmohan/minitorch/tree/master/stackgrad/backend/metal.py) | MLX on the Apple GPU | attention forward and backward, quantized matmul, in Metal through `mx.fast.metal_kernel` | `uv sync --extra metal` |
-| [cuda](https://github.com/samitmohan/minitorch/tree/master/stackgrad/backend/cuda.py) | CuPy on an NVIDIA GPU | FlashAttention-2 forward and backward in Triton | `uv sync --extra cuda --no-dev` |
+| [cpu](https://github.com/samitmohan/stackgrad/tree/master/stackgrad/backend/cpu.py) | NumPy, the reference every other backend is checked against | none | `uv sync` |
+| [metal](https://github.com/samitmohan/stackgrad/tree/master/stackgrad/backend/metal.py) | MLX on the Apple GPU | attention forward and backward, quantized matmul, in Metal through `mx.fast.metal_kernel` | `uv sync --extra metal` |
+| [cuda](https://github.com/samitmohan/stackgrad/tree/master/stackgrad/backend/cuda.py) | CuPy on an NVIDIA GPU | FlashAttention-2 forward and backward in Triton | `uv sync --extra cuda --no-dev` |
 
 A backend is a module that exports 27 names: 25 array functions (`exp`, `log`, `where`, `broadcast_to`,
 `scatter_add`, `im2col`, and the rest) plus `float32` and `inf`. `stackgrad/backend/cpu.py` lists them. `mlops.py` calls

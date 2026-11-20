@@ -9,11 +9,11 @@ stackgrad: A deep learning framework written from scratch, up to a served Qwen3 
 
 <h3>
 
-[Homepage](https://github.com/samitmohan/minitorch) | [Documentation](https://samitmohan.github.io/minitorch/) | [Write-up](https://samitmohan.in/blog/minitorch)
+[Homepage](https://github.com/samitmohan/stackgrad) | [Documentation](https://samitmohan.github.io/stackgrad/) | [Write-up](https://samitmohan.in/blog/minitorch)
 
 </h3>
 
-[![CI](https://github.com/samitmohan/minitorch/actions/workflows/ci.yml/badge.svg)](https://github.com/samitmohan/minitorch/actions/workflows/ci.yml)
+[![CI](https://github.com/samitmohan/stackgrad/actions/workflows/ci.yml/badge.svg)](https://github.com/samitmohan/stackgrad/actions/workflows/ci.yml)
 
 </div>
 
@@ -94,15 +94,15 @@ A new backend is one module that exports the 27 names [cpu.py](stackgrad/backend
 ## Installation
 
 ```sh
-git clone https://github.com/samitmohan/minitorch.git
-cd minitorch
+git clone https://github.com/samitmohan/stackgrad.git
+cd stackgrad
 uv sync --extra metal --extra serve   # Apple silicon; NVIDIA: uv sync --extra cuda --no-dev
 ```
 
 ## Documentation
 
-The [docs website](https://samitmohan.github.io/minitorch/) has a quickstart, the API reference, and a
-[showcase](https://samitmohan.github.io/minitorch/showcase/) of what stackgrad runs, with every measured number and the
+The [docs website](https://samitmohan.github.io/stackgrad/) has a quickstart, the API reference, and a
+[showcase](https://samitmohan.github.io/stackgrad/showcase/) of what stackgrad runs, with every measured number and the
 command that produced it. It builds from the [docs/](docs) directory. The write-up,
 [Modern AI: Autograd to Agents](https://samitmohan.in/blog/minitorch), explains each piece from first principles.
 

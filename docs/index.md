@@ -4,8 +4,8 @@ stackgrad is a deep learning framework written from scratch, with everything bui
 retrieval app and a tool-using agent. This page is for users of the library. Install from source:
 
 ```bash
-git clone https://github.com/samitmohan/minitorch.git
-cd minitorch
+git clone https://github.com/samitmohan/stackgrad.git
+cd stackgrad
 uv sync --extra metal    # Apple silicon; NVIDIA: uv sync --extra cuda --no-dev
 ```
 

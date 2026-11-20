@@ -1,7 +1,7 @@
 # uv run --extra docs mkdocs serve
 site_name: stackgrad docs
-site_url: https://samitmohan.github.io/minitorch/
-repo_url: https://github.com/samitmohan/minitorch/
+site_url: https://samitmohan.github.io/stackgrad/
+repo_url: https://github.com/samitmohan/stackgrad/
 edit_uri: edit/master/docs
 nav:
 - Home:
