@@ -1,4 +1,3 @@
-"""Causal self-attention with RoPE, grouped-query heads, and a KV cache."""
 import numpy as np
 
 from . import mlops
@@ -8,12 +7,7 @@ from .tensor import _apply, cat
 
 
 def apply_rope(x, start, theta):
-    """Rotate each (x[i], x[i + D/2]) pair by an angle set by its position.
-
-    x: (B, H, T, D), holding positions start .. start+T-1; start is one int, or one per row (B,)
-    when the rows of a batch sit at different positions. Uses the half-split layout of Llama
-    and Qwen, so pretrained checkpoints load without permuting.
-    """
+    """Rotates each (x[i], x[i + D/2]) pair by its position's angle, in Llama/Qwen's half-split layout."""
     half = x.shape[-1] // 2
     freqs = theta ** (-np.arange(half) / half)
     positions = np.reshape(start, (-1, 1, 1)) + np.arange(x.shape[2])[:, None]  # (B or 1, T, 1)
@@ -24,17 +18,10 @@ def apply_rope(x, start, theta):
 
 
 def scaled_dot_product_attention(q, k, v, pad=None, causal=True):
-    """Causal attention: q (B, H, T, D) against k, v (B, Hkv, S, D), Hkv dividing H (grouped-query).
-
-    The newest T of the S positions are the queries, so the same call serves training
-    (T == S) and decoding against a KV cache (T < S). pad (B,) hides each row's first
-    pad[b] keys, its left padding, from every query. causal=False lets every query see every key
-    (image self-attention and cross-attention). See mlops.Attention.
-    """
+    """q (B, H, T, D) over k, v (B, Hkv, S, D), queries at the last T positions; pad (B,) masks left padding."""
     key_bias = None
     if pad is not None:
-        # finite, not -inf: a padding query sees only padding, and a softmax over nothing but -inf is NaN,
-        # which would reach real rows through 0 * NaN
+        # -1e9, not -inf: a padding query sees only padding, and an all -inf softmax is NaN that leaks via 0 * NaN
         key_bias = np.where(np.arange(k.shape[2]) < np.asarray(pad)[:, None], -1e9, 0.0).astype(np.float32)
     return _apply(mlops.Attention, q, k, v, key_bias=key_bias, causal=causal)
 
@@ -49,7 +36,7 @@ class KVCache:
         return 0 if self.k is None else self.k.shape[2]
 
     def truncate(self, n):
-        """Forget every position from n on: speculative decoding drops the drafts the target rejected."""
+        """Drops every position from n on, for speculative decoding's rejected drafts."""
         self.k, self.v = self.k[:, :, :n], self.v[:, :, :n]
 
     def update(self, k, v):
@@ -59,12 +46,11 @@ class KVCache:
 
 
 class Attention(Module):
-    """head_dim defaults to d_model // n_heads (Qwen3 sets it apart). qk_norm adds Qwen3's
-    RMSNorm on each head's queries and keys before RoPE, which keeps attention logits in range."""
+    """Multi-head attention with RoPE and grouped-query heads; qk_norm adds Qwen3's per-head RMSNorm on q, k."""
     def __init__(self, d_model, n_heads, n_kv_heads=None, rope_theta=10000.0, head_dim=None, qk_norm=False, norm_eps=1e-5,
                  rope=True):
         super().__init__()
-        self.rope = rope  # False: no position information at all (the NoPE ablation); causal masking alone orders tokens
+        self.rope = rope  # False is the NoPE ablation: causal masking alone orders tokens
         self.n_heads = n_heads
         self.n_kv_heads = n_kv_heads or n_heads
         self.head_dim = head_dim or d_model // n_heads
@@ -75,7 +61,7 @@ class Attention(Module):
         self.o_proj = Linear(n_heads * self.head_dim, d_model, bias=False)
         self.q_norm = RMSNorm(self.head_dim, norm_eps) if qk_norm else None
         self.k_norm = RMSNorm(self.head_dim, norm_eps) if qk_norm else None
-        self.record, self.recorded = False, None  # record=True keeps the last queries and keys, for drawing attention
+        self.record, self.recorded = False, None  # record=True keeps the last q and k, for drawing attention maps
 
     def forward(self, x, cache=None, pad=None):
         B, T, _ = x.shape

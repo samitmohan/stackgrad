@@ -17,7 +17,7 @@ class Optimizer:
         raise NotImplementedError
 
     def _realize(self, *state):
-        # lazy backends (MLX) compute the new weights here, so the next step's graph starts from arrays, not this step's ops
+        # lazy backends (MLX) realize here, so the next step's graph starts from arrays
         backend.get(self.params[0].device).realize(*[p.data for p in self.params], *state)
 
 
@@ -67,7 +67,7 @@ class Adam(Optimizer):
 
 
 class AdamW(Adam):
-    """Adam with decoupled weight decay: shrink the weights directly instead of adding wd * p to the gradient."""
+    """Adam with decoupled weight decay: shrink the weights instead of adding wd * p to the gradient."""
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.01):
         super().__init__(params, lr, betas, eps, weight_decay=0.0)
         self.decay = weight_decay
@@ -91,7 +91,7 @@ def cosine_lr(step, max_lr, min_lr, warmup_steps, total_steps):
 
 def clip_grad_norm(params, max_norm):
     """Clip gradient norm across all parameters (like torch.nn.utils.clip_grad_norm_)."""
-    # one sum on the device and one transfer, instead of a host sync per parameter
+    # one device sum and one host sync, not one per parameter
     total_norm = float(sum((p.grad * p.grad).sum() for p in params if p.grad is not None)) ** 0.5
     if total_norm > max_norm:
         scale = max_norm / (total_norm + 1e-12)
@@ -102,13 +102,7 @@ def clip_grad_norm(params, max_norm):
 
 
 class LossScaler:
-    """Dynamic loss scaling, for float16 multiplies (autocast("float16")).
-
-    A gradient below float16's smallest value (about 6e-8) becomes zero. Multiplying the loss by a
-    large scale multiplies every gradient too, which keeps them in range; unscale() divides them
-    back before the optimizer sees them. When a gradient overflows instead, the step is skipped and
-    the scale halves; after `interval` clean steps it doubles again.
-    """
+    """Dynamic loss scaling for autocast("float16"): halve on overflow, double after `interval` clean steps."""
     def __init__(self, scale=2.0 ** 15, interval=1000):
         self.scale, self.interval, self.clean = scale, interval, 0
 

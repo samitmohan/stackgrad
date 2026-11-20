@@ -1,10 +1,3 @@
-"""HTTP API behind the UI: training runs, autograd graphs, BPE traces, gradient checks, generation,
-and an OpenAI-compatible chat endpoint serving Qwen3-0.6B through stackgrad's engine.
-
-    uv run uvicorn stackgrad.serve.api:app --port 8000
-
-Serves ui/dist at / when it has been built (cd ui && npm run build).
-"""
 import ast
 import asyncio
 import json
@@ -28,15 +21,13 @@ from stackgrad.tokenizer import Tokenizer
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNS = ROOT / "runs"
-IDLE_S = 120  # seconds without a new metrics line before a run counts as finished
-MAX_PROMPT_CHARS = 64_000  # far past what a 4k-token context holds
+IDLE_S = 120
+MAX_PROMPT_CHARS = 64_000  # past what a 4k-token context holds
 EOT = "<|endoftext|>"
 app = FastAPI(title="stackgrad")
-# one model call at a time: the endpoints and the chat engine's thread share the loaded models and the device's memory
+# one model call at a time: the endpoints and the engine thread share the models and device memory
 _model_lock = threading.Lock()
 
-
-# training runs
 
 def _run_dir(name):
     path = (RUNS / name).resolve()
@@ -46,7 +37,7 @@ def _run_dir(name):
 
 
 def _parse(line):
-    """One metrics line. A diverged run logs NaN, which Python's json writes but browsers and strict JSON reject: it becomes null."""
+    # a diverged run logs NaN, which python's json writes but strict JSON rejects: it becomes null
     return json.loads(line, parse_constant=lambda _: None)
 
 
@@ -81,13 +72,12 @@ async def stream(name: str, offset: int = 0):
             with path.open() as f:
                 f.seek(pos)
                 chunk = f.read()
-            # only send complete lines; a partial one waits for its newline
+            # a partial line waits for its newline
             end = chunk.rfind("\n") + 1
             for line in chunk[:end].splitlines():
                 yield f"data: {json.dumps(_parse(line))}\n\n"
             pos += len(chunk[:end].encode())
-            # a run that stopped writing is finished: end the stream, so a page that shows several finished runs does
-            # not hold the browser's six connections per host open forever (the slowest live run, GRPO, writes every ~47 s)
+            # end idle streams, or finished runs hold the browser's 6 connections per host (GRPO writes every ~47 s)
             if time.time() - path.stat().st_mtime > IDLE_S:
                 yield "event: end\ndata: {}\n\n"
                 return
@@ -96,8 +86,6 @@ async def stream(name: str, offset: int = 0):
     return StreamingResponse(lines(), media_type="text/event-stream")
 
 
-# autograd graph for a typed expression
-
 BINOPS = {ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul, ast.Div: operator.truediv,
           ast.Pow: operator.pow, ast.MatMult: operator.matmul}
 FUNCS = {"exp": Tensor.exp, "log": Tensor.log, "relu": Tensor.relu, "sigmoid": Tensor.sigmoid,
@@ -105,7 +93,7 @@ FUNCS = {"exp": Tensor.exp, "log": Tensor.log, "relu": Tensor.relu, "sigmoid": T
 
 
 def _eval(node, env):
-    """Evaluate an expression AST using only Tensor ops: no names, calls, or attributes outside the allowlist."""
+    # user text: walk an allowlist of AST nodes, never eval it
     if isinstance(node, ast.BinOp) and type(node.op) in BINOPS:
         left, right = _eval(node.left, env), _eval(node.right, env)
         if isinstance(node.op, ast.Pow) and not isinstance(left, Tensor):
@@ -116,7 +104,7 @@ def _eval(node, env):
     if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in FUNCS \
             and len(node.args) == 1 and not node.keywords:
         arg = _eval(node.args[0], env)
-        return FUNCS[node.func.id](arg if isinstance(arg, Tensor) else Tensor(arg))  # exp(2) as well as exp(x)
+        return FUNCS[node.func.id](arg if isinstance(arg, Tensor) else Tensor(arg))
     if isinstance(node, ast.Name) and node.id in env:
         return env[node.id]
     if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)) and not isinstance(node.value, bool):
@@ -130,7 +118,6 @@ class GraphRequest(BaseModel):
 
 
 def _small(a):
-    """A small array as JSON. log(-1) or x / 0 make NaN and infinities, which JSON cannot carry: they become null."""
     if a is None or a.size > 16:
         return None
     a = np.asarray(a, dtype=float)
@@ -175,8 +162,6 @@ def _walk(root):
     return order
 
 
-# tokenizer
-
 @lru_cache(maxsize=1)
 def _tokenizer():
     bpe = ROOT / "data" / "tinystories_bpe"
@@ -200,8 +185,6 @@ def bpe(req: TextRequest):
             "trace": tok.trace(req.text)}
 
 
-# gradient checks: the same registry test_grads.py runs
-
 @app.post("/api/gradcheck")
 def gradcheck():
     sys.path.insert(0, str(ROOT))
@@ -217,8 +200,6 @@ def gradcheck():
                 results.append({"name": name, "ok": False, "error": repr(e)[:300]})
     return results
 
-
-# generation from a run's checkpoint
 
 @lru_cache(maxsize=2)
 def _model(name, mtime):
@@ -253,15 +234,12 @@ def generate(req: GenerateRequest):
             "new_tokens": int(ids.shape[1] - len(prompt))}
 
 
-# chat: Qwen3-0.6B on the Apple GPU, through the scheduler and engine (stackgrad/serve)
-
 QWEN = ROOT / "data" / "Qwen3-0.6B"
 _chat = None
 _chat_lock = threading.Lock()
 
 
 def _qwen():
-    """(tokenizer, engine), loaded on the first chat request: about 20 s, once."""
     global _chat
     with _chat_lock:
         if _chat is None:
@@ -279,7 +257,7 @@ def _qwen():
 
 class Message(BaseModel):
     role: Literal["system", "user", "assistant", "tool"]
-    content: str = Field(max_length=16000)  # about 4,000 tokens: three of SQuAD's longest paragraphs and a question
+    content: str = Field(max_length=16000)  # ~4k tokens: three of SQuAD's longest paragraphs and a question
 
 
 class ChatRequest(BaseModel):
@@ -289,12 +267,11 @@ class ChatRequest(BaseModel):
     temperature: float = Field(default=0.7, ge=0, le=2)
     top_p: float = Field(default=0.95, gt=0, le=1)
     stream: bool = False
-    # function schemas the model may call; its <tool_call> blocks come back inside the message text, as Qwen3 writes them
+    # tool calls come back as <tool_call> blocks inside the message text, as Qwen3 writes them
     tools: list[dict] | None = Field(default=None, max_length=16)
 
 
 def _replies(tok, tokens, eos):
-    """(text so far, finish reason) each time the reply grows by whole characters; the finish reason comes last."""
     ids, finish = [], "length"
     for t in iter(tokens.get, None):
         if isinstance(t, Exception):
@@ -315,7 +292,7 @@ def chat_completions(req: ChatRequest):
 
     tok, engine = _qwen()
     text = chat_prompt([m.model_dump() for m in req.messages], tools=req.tools)
-    if len(text) > MAX_PROMPT_CHARS:  # checked before encoding: BPE on 16k characters of one word takes seconds
+    if len(text) > MAX_PROMPT_CHARS:  # before encoding: BPE on 16k characters of one word takes seconds
         raise HTTPException(400, f"the prompt has {len(text):,} characters; the limit is {MAX_PROMPT_CHARS:,}")
     prompt = tok.encode(text)
     eos = tok.ids[b"<|im_end|>"]
@@ -334,7 +311,7 @@ def chat_completions(req: ChatRequest):
                        "choices": [{"index": 0, "message": {"role": "assistant", "content": text}, "finish_reason": finish}]}
 
     def events():
-        # shortcut: a client that disconnects leaves its request generating to max_tokens; cancel it in the engine if that wastes real time
+        # shortcut: a disconnected client's request still generates to max_tokens; cancel it in the engine if that costs real time
         def chunk(delta, finish=None, **extra):
             body = head | {"object": "chat.completion.chunk", "choices": [{"index": 0, "delta": delta, "finish_reason": finish}]} | extra
             return f"data: {json.dumps(body)}\n\n"
@@ -388,14 +365,11 @@ def attention_patterns(req: AttentionRequest):
     return {"tokens": [tok.decode([i]) for i in ids], "layers": layers}
 
 
-# the post's two applications, live: they run apps/rag.py's and apps/agent.py's own code on this server's engine
-
 class AskRequest(BaseModel):
     question: str = Field(min_length=1, max_length=1000)
 
 
 def _complete(messages, max_tokens, tools=None):
-    """One greedy reply from the chat engine, in process: (text, prompt tokens, reply tokens, seconds)."""
     from stackgrad.qwen3 import chat_prompt
 
     tok, engine = _qwen()
@@ -412,8 +386,7 @@ def _complete(messages, max_tokens, tools=None):
 
 @lru_cache(maxsize=1)
 def _retriever():
-    """(tokenizer, Qwen3-Embedding, SQuAD paragraphs, index), loaded on the first question."""
-    # the apps sit on top of stackgrad, so they are imported here, not at the top of this module
+    # apps sit on top of stackgrad: import them here, not at module top
     from apps.rag import EMBEDDER, INDEX, corpus
     from stackgrad.qwen3 import load_qwen3, load_tokenizer
 
@@ -433,7 +406,7 @@ def rag(req: AskRequest):
         query = embed(model, tok, [INSTRUCT + req.question], "metal")[0]
         embed_ms = (time.perf_counter() - start) * 1000
         start = time.perf_counter()
-        scores = index @ query  # the search: one matrix-vector product and a sort
+        scores = index @ query
         top = np.argsort(-scores)[:3]
         search_ms = (time.perf_counter() - start) * 1000
     answer, _, _, seconds = _complete([{"role": "user", "content": rag_prompt(req.question, [paragraphs[i][1] for i in top])}], 32)
@@ -453,13 +426,11 @@ def agent(req: AskRequest):
     return {"reply": reply, "answer": final_number(reply), "trace": trace}
 
 
-# benchmark results
-
 @app.get("/api/bench")
 def bench():
     return {p.stem: json.loads(p.read_text()) for p in sorted((ROOT / "bench" / "results").glob("*.json"))}
 
 
-app.mount("/results", StaticFiles(directory=ROOT / "bench" / "results"), name="results")  # the post's images
+app.mount("/results", StaticFiles(directory=ROOT / "bench" / "results"), name="results")
 if (ROOT / "ui" / "dist").exists():
     app.mount("/", StaticFiles(directory=ROOT / "ui" / "dist", html=True), name="ui")

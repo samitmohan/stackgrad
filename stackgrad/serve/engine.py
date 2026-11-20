@@ -1,12 +1,3 @@
-"""The serving engine: a background thread runs the scheduler, and each request's tokens stream back through a queue.
-
-    engine = Engine(Scheduler(StackgradRunner(model), BlockManager(512)), lock)
-    tokens = engine.submit(prompt_ids, max_tokens=200, eos_id=eos)   # a queue.Queue
-    for token in iter(tokens.get, None): ...
-
-Requests from many callers join and leave between scheduler steps and share each decode step,
-which is continuous batching (scheduler.py) seen from the outside.
-"""
 import itertools
 import queue
 import threading
@@ -15,8 +6,8 @@ from .scheduler import Request
 
 
 class Engine:
+    """A background thread steps the scheduler under `lock`; each request's tokens stream back through a queue."""
     def __init__(self, scheduler, lock):
-        """`lock` is held around every step: the model and its caches are not safe to run from two threads at once."""
         self.scheduler, self.lock = scheduler, lock
         self.inbox, self.outputs, self.ids = queue.Queue(), {}, itertools.count()
         threading.Thread(target=self._loop, daemon=True, name="engine").start()
@@ -33,22 +24,22 @@ class Engine:
     def _loop(self):
         s = self.scheduler
         while True:
-            s.add(self.inbox.get())  # sleep until there is work
+            s.add(self.inbox.get())
             while s.has_work():
-                while not self.inbox.empty():  # newcomers join between steps
+                while not self.inbox.empty():
                     s.add(self.inbox.get_nowait())
                 try:
                     with self.lock:
                         emitted = s.step()
                 except Exception as e:  # noqa: BLE001 - every caller must hear about it, or it waits forever
-                    # every live request, including one caught between the queue and the batch when prefill failed
-                    for rid in list(self.outputs):  # a snapshot: submit() may add one meanwhile, from another thread
+                    # self.outputs, not s.running: it also holds a request popped from waiting whose prefill raised
+                    for rid in list(self.outputs):  # snapshot: submit() may add one from another thread
                         s.blocks.release(rid)
                         s.runner.release(rid)
                         self.outputs.pop(rid).put(e)
                     s.waiting.clear()
                     s.running.clear()
-                    while not self.inbox.empty():  # submitted while the step failed: tell any still listening, then drop
+                    while not self.inbox.empty():  # submitted during the failed step: tell any caller still listening
                         out = self.outputs.pop(self.inbox.get_nowait().id, None)
                         if out is not None:
                             out.put(e)

@@ -1,13 +1,3 @@
-"""Activation checkpointing on a real update: LoRA on Qwen3-0.6B over 8 GSM8K examples (SPEC.md, CS336 A2).
-
-    uv run python bench/checkpointing.py --device metal
-    CUPY_TF32=1 uv run --no-dev python bench/checkpointing.py --device cuda      # bqa3
-
-For each setting (checkpointing on or off, examples per forward pass) it runs train_lora.py's
-update on the same 8 examples and reports the peak memory the device allocated and the time
-for the whole batch. Settings that run out of memory are recorded as such.
-Writes bench/results/checkpointing_<device>.json.
-"""
 import argparse
 import json
 import sys
@@ -25,13 +15,12 @@ RESULTS = Path(__file__).resolve().parent / "results"
 
 
 def peak_tracker(device):
-    """(reset, read) for the device's peak allocation in bytes."""
     if device == "metal":
         import mlx.core as mx
         return mx.reset_peak_memory, mx.get_peak_memory
     import cupy as cp
     pool = cp.get_default_memory_pool()
-    # CuPy's pool only grows to the largest demand, so after freeing its cache its size afterwards is the peak
+    # after free_all_blocks the pool only grows to the largest demand, so its size is the peak
     return pool.free_all_blocks, pool.total_bytes
 
 

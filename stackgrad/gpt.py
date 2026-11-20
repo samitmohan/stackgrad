@@ -1,9 +1,3 @@
-"""A modern decoder-only language model: the CS336 assignment 1 architecture.
-
-Pre-norm blocks with RMSNorm, RoPE attention (optionally grouped-query), and a
-SwiGLU feed-forward. No biases, untied output head. attn_res=True swaps the residual
-sums for Block Attention Residuals (see DepthAttention in layers.py).
-"""
 import numpy as np
 
 from .attention import Attention, KVCache
@@ -34,7 +28,7 @@ class Block(Module):
         self.ffn = SwiGLU(d_model, d_ff) if ffn == "swiglu" else SiLUMLP(d_model, d_ff)
 
     def forward(self, x, cache=None, pad=None):
-        if self.norm == "post":  # the original transformer's order: normalize after each residual add
+        if self.norm == "post":  # the original transformer's order
             x = self.attn_norm(x + self.attn(x, cache, pad))
             return self.ffn_norm(x + self.ffn(x))
         if self.norm == "none":
@@ -44,20 +38,15 @@ class Block(Module):
         return x + self.ffn(self.ffn_norm(x))
 
     def sublayers(self, cache=None, pad=None):
-        """The block's attention and feed-forward as two functions of their input, without the residual adds that
-        forward() puts around them. Attention Residuals mixes their outputs itself."""
+        """Attention and feed-forward as functions of their input, without forward()'s residual adds."""
         return [lambda x: self.attn(self.attn_norm(x), cache, pad), lambda x: self.ffn(self.ffn_norm(x))]
 
 
 class TransformerLM(Module):
-    """The CS336 model by default. Qwen3 is the same model with head_dim, qk_norm, norm_eps,
-    and tie_embeddings set (see qwen3.py): the output head reuses the embedding table."""
+    """Decoder-only transformer LM: the CS336 model by default, Qwen3 with the options qwen3.py sets."""
     def __init__(self, vocab_size, context_length, d_model, n_layers, n_heads, d_ff,
                  n_kv_heads=None, rope_theta=10000.0, head_dim=None, qk_norm=False, norm_eps=1e-5, tie_embeddings=False,
                  norm="pre", rope=True, ffn="swiglu", attn_res=False, attn_res_block=8):
-        """attn_res=True: Block Attention Residuals. Before every attention and feed-forward, a DepthAttention mixes
-        the finished block sums and the current block's partial sum, where a block is attn_res_block sublayers (two
-        per Block); one more mixes them before the final norm."""
         super().__init__()
         assert not attn_res or norm == "pre", "Attention Residuals is defined on pre-norm blocks"
         self.context_length = context_length
@@ -68,21 +57,20 @@ class TransformerLM(Module):
                        for _ in range(n_layers)]
         self.norm = None if norm == "none" else RMSNorm(d_model, norm_eps)  # "none" removes every RMSNorm, the final one too
         self.head = None if tie_embeddings else Linear(d_model, vocab_size, bias=False)
-        self.checkpoint_blocks = False  # True: recompute each block in backward instead of storing its activations
+        self.checkpoint_blocks = False  # recompute each block in backward instead of storing its activations
 
-        # CS336 init: linear weights N(0, 2 / (fan_in + fan_out)), embeddings N(0, 1), both truncated at 3 std
+        # CS336 init
         for p in self.parameters():
             if p.ndim == 2:
                 p.data = trunc_normal(p.shape, np.sqrt(2.0 / sum(p.shape)))
         self.embed.weight.data = trunc_normal(self.embed.weight.shape, 1.0)
 
     def forward(self, idx, caches=None, pad=None):
-        """idx: int array (B, T) -> logits (B, T, vocab). Pass one KVCache per block to decode incrementally,
-        and pad (B,) when rows are left-padded to a common length."""
+        """idx (B, T) ints -> logits (B, T, vocab); caches is one KVCache per block, pad (B,) the left padding."""
         return self.project(self.hidden(idx, caches, pad))
 
     def hidden(self, idx, caches=None, pad=None):
-        """The final normalized hidden states (B, T, d_model): the whole model but the output projection."""
+        """Final normalized hidden states (B, T, d_model): the model without the output projection."""
         x = self.embed(idx)
         if self.depth is not None:
             x = self.attn_res(x, caches, pad)
@@ -107,23 +95,17 @@ class TransformerLM(Module):
         return self.depth[-1](blocks if partial is None else blocks + [partial])
 
     def project(self, h):
-        """Hidden states -> logits, through the output head or, when tied, the embedding table.
-        Callers that need only some positions project only those: a row of logits is vocab-size floats."""
+        """Hidden states -> logits, through the head or the tied embedding table."""
         return self.head(h) if self.head is not None else h @ self.embed.weight.T
 
     def generate(self, idx, max_new_tokens, temperature=1.0, top_k=None, top_p=None, eos_id=None, pad=None):
-        """Extend int array idx (B, T0) by up to max_new_tokens, stopping once every row has emitted eos_id.
-
-        Prompts of different lengths share a batch left-padded: pad (B,) counts each row's
-        padding, which attention hides, and each row's tokens keep the positions they would have
-        alone, so RoPE sees the same distances.
-        """
+        """Extends idx (B, T0) by up to max_new_tokens until every row emits eos_id; pad (B,) is left padding."""
         idx = np.asarray(idx)
         assert idx.shape[1] + max_new_tokens <= self.context_length, "prompt + new tokens exceed context_length"
         caches = [KVCache() for _ in self.blocks]
         done = np.zeros(len(idx), dtype=bool)
         with no_grad():
-            logits = self.project(self.hidden(idx, caches, pad)[:, -1])  # prefill: the whole prompt in one pass
+            logits = self.project(self.hidden(idx, caches, pad)[:, -1])
             for _ in range(max_new_tokens):
                 if top_k is None and top_p is None:
                     next_id = sample_on_device(logits, temperature)
@@ -134,5 +116,5 @@ class TransformerLM(Module):
                     done |= next_id == eos_id
                     if done.all():
                         break
-                logits = self.project(self.hidden(next_id[:, None], caches, pad)[:, -1])  # decode: one new token per pass
+                logits = self.project(self.hidden(next_id[:, None], caches, pad)[:, -1])
         return idx

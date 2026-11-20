@@ -1,24 +1,3 @@
-"""Causal attention forward as Metal kernels, in three versions that each fix the previous one's bottleneck.
-
-    q (B, H, T, D), k and v (B, Hkv, S, D)  ->  out (B, H, T, D), lse (B, H, T)
-
-Query row i sits at absolute position S - T + i and sees keys 0 .. S - T + i, so
-the same kernel serves training (T == S) and decoding against a KV cache (T < S).
-Query head h reads kv head h // (H / Hkv): grouped-query attention without
-copying K and V. Scale is 1/sqrt(D). `lse` is each row's log-sum-exp of scores,
-which is all a backward pass needs to rebuild the softmax.
-
-None of them ever writes the (T, S) score matrix to memory. Each keeps a running
-max m, a running sum l, and an output accumulator, and rescales them by
-exp(m_old - m_new) whenever a larger score shows up (the online softmax).
-
-v1  one thread per query row, reading K and V straight from device memory. Every
-    thread re-reads every key, so it is bound by memory traffic.
-v2  a threadgroup of 32 query rows loads each K/V tile into threadgroup memory
-    once and all 32 rows reuse it: 32x less device traffic.
-v3  v2's tiles, with QK^T and PV done by simdgroup 8x8 matrix multiplies (the
-    GPU's matrix hardware) instead of one scalar dot product per thread.
-"""
 import mlx.core as mx
 
 _SHAPES = """
@@ -91,8 +70,7 @@ _V2 = _SHAPES + """
     }
 """
 
-# 4 simdgroups x 8 query rows. Within a simdgroup, lanes 4r..4r+3 share row r of the
-# softmax, each taking a quarter of the tile's columns.
+# v3: 4 simdgroups x 8 query rows; lanes 4r..4r+3 share softmax row r, a quarter of the columns each
 _V3 = _SHAPES + """
     constexpr int BQ = 32, TILE = (32 * D > 2 * BK * D) ? 32 * D : 2 * BK * D;
     threadgroup float smem[TILE];                           // Q staging, then K/V tiles, then O staging
@@ -198,7 +176,7 @@ _KERNELS = {
 
 
 def attention(q, k, v, version="v3"):
-    """Causal attention forward. Returns (out, lse); see the module docstring for shapes."""
+    """Causal attention: q (B, H, T, D), k, v (B, Hkv, S, D) -> out (B, H, T, D), lse (B, H, T)."""
     B, H, T, D = q.shape
     assert k.shape[1] and H % k.shape[1] == 0 and D % 8 == 0 and D <= 128, (q.shape, k.shape)
     bk = 32 if D <= 64 else 16  # keeps the K/V tiles within 32 KB of threadgroup memory

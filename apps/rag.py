@@ -1,17 +1,3 @@
-"""Retrieval on stackgrad (SPEC.md M5): Qwen3-Embedding-0.6B finds the passage, Qwen3-0.6B on the server answers.
-
-    uv run uvicorn stackgrad.serve.api:app --port 8000     # the server, if it is not already up
-    uv run python apps/rag.py                               # writes bench/results/rag.json
-
-The corpus is SQuAD v1.1's dev set, 2,067 Wikipedia paragraphs. stackgrad embeds each paragraph
-once: Qwen3-Embedding is Qwen3's architecture, and its embedding is the last token's hidden
-state, scaled to length 1. The index is a NumPy matrix, and a query's nearest paragraphs are
-its largest dot products. For --n questions drawn at random, the script measures retrieval (is
-the paragraph the question was written from among the top k?) and asks the server for an
-answer twice, closed-book and with the top k paragraphs in the prompt. Answers score by SQuAD's
-rules: exact match and token F1 against any reference answer, after normalizing both, plus whether
-the answer contains a reference as whole words, since a chat model answers in sentences.
-"""
 import argparse
 import collections
 import json
@@ -35,7 +21,7 @@ INSTRUCT = "Instruct: Given a question, retrieve Wikipedia passages that answer 
 
 
 def embed(model, tok, texts, device, batch=16):
-    """Unit vectors for texts: the last token's final hidden state, Qwen3-Embedding's pooling."""
+    """Qwen3-Embedding's pooling: the last token's final hidden state, scaled to unit length."""
     eos = tok.ids[b"<|endoftext|>"]
     ids = [tok.encode(t) + [eos] for t in texts]
     out = np.zeros((len(texts), model.embed.weight.shape[1]), np.float32)
@@ -51,7 +37,6 @@ def embed(model, tok, texts, device, batch=16):
 
 
 def corpus():
-    """SQuAD v1.1 dev: (article title, paragraph) pairs, and every question as (question, reference answers, paragraph index)."""
     articles = json.loads((ROOT / "data/squad/dev-v1.1.json").read_text())["data"]
     paragraphs = [(a["title"].replace("_", " "), para["context"]) for a in articles for para in a["paragraphs"]]
     questions = [(q["question"], [g["text"] for g in q["answers"]], i)
@@ -60,13 +45,11 @@ def corpus():
 
 
 def rag_prompt(question, passages):
-    """The answer prompt: the retrieved paragraphs, numbered, then the question."""
     numbered = "\n\n".join(f"[{j + 1}] {text}" for j, text in enumerate(passages))
     return f"Answer with a short phrase copied from the passages, no explanation.\n\n{numbered}\n\nQuestion: {question}"
 
 
 def ask(server, prompt):
-    """The server's greedy reply to one user message, and the seconds it took."""
     body = json.dumps({"messages": [{"role": "user", "content": prompt}], "temperature": 0, "max_tokens": 32}).encode()
     request = urllib.request.Request(f"{server}/v1/chat/completions", body, {"content-type": "application/json"})
     start = time.perf_counter()
@@ -75,17 +58,13 @@ def ask(server, prompt):
 
 
 def normalize(text):
-    """SQuAD's answer normalization: lowercase, no punctuation, no articles, single spaces."""
+    """SQuAD's official answer normalization."""
     text = "".join(c for c in text.lower() if c not in set(string.punctuation))
     return " ".join(re.sub(r"\b(a|an|the)\b", " ", text).split())
 
 
 def scores(answer, golds):
-    """(exact match, token F1, contains) against the best of the reference answers.
-
-    Contains asks whether a reference appears in the answer as whole words: a chat model that answers
-    "It is compared to the mitochondrial double membrane." is right, and exact match scores it 0.
-    """
+    """(exact match, token F1, contains); contains credits a chat model that answers in a full sentence."""
     def f1(gold):
         a, g = normalize(answer).split(), normalize(gold).split()
         common = sum((collections.Counter(a) & collections.Counter(g)).values())
@@ -107,7 +86,7 @@ def main():
 
     tok = load_tokenizer(EMBEDDER)
     model = load_qwen3(EMBEDDER).to(args.device)
-    build_time = INDEX.with_suffix(".json")  # the corpus never changes, so it is embedded once, and that time kept beside it
+    build_time = INDEX.with_suffix(".json")  # the corpus never changes: embed it once, keep the build time beside it
     if INDEX.exists():
         index, index_s = np.load(INDEX), json.loads(build_time.read_text())["seconds"]
     else:
@@ -119,8 +98,8 @@ def main():
     start = time.perf_counter()
     queries = embed(model, tok, [INSTRUCT + q for q, _, _ in questions], args.device)
     query_ms = (time.perf_counter() - start) / len(questions) * 1000
-    ranked = np.argsort(-(queries @ index.T), axis=1)[:, :args.k]  # the search: one matrix product, then a sort
-    del model  # the server loads its own model on the first question; one model in memory at a time
+    ranked = np.argsort(-(queries @ index.T), axis=1)[:, :args.k]
+    del model  # one model in memory at a time: the server loads its own on the first question
     backend.get(args.device).clear_cache()
     print(f"embedded {len(paragraphs):,} paragraphs in {index_s:.0f} s, {query_ms:.0f} ms per question", flush=True)
 

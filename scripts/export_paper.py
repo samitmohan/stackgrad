@@ -1,15 +1,3 @@
-"""Freeze the post's data for a static copy of it, such as the one on samitmohan.in/blog/minitorch.
-
-    uv run python scripts/export_paper.py ../portfolio/web
-
-Writes, under that site's root:
-  src/paper/minitorch/data/results.json  what /api/bench, /api/runs and the metric streams give the live post
-  src/paper/minitorch/data/replays.json  bench/replays/ (scripts/record_replays.py), for the figures that call the server
-  public/paper/minitorch/                the attention patterns (fetched by their figure) and Stable Diffusion's images
-Then it fails if any section's paragraphs (<p> blocks) read differently in ui/src/post and in the port: a prose edit
-goes into both. Captions, figures and the header (Head.tsx, kit.tsx) may differ, since the port replays the live figures.
-"""
-
 import argparse
 import difflib
 import json
@@ -27,7 +15,7 @@ CHROME = {"Head.tsx", "kit.tsx"}  # the port's header and data loading are its o
 
 
 def downsample(rows, n):
-    """Every k-th row and the last, as ui/src/lib.ts's downsample picks them."""
+    """Picks the rows ui/src/lib.ts's downsample picks."""
     if len(rows) <= n:
         return rows
     k = -(-len(rows) // n)
@@ -44,7 +32,7 @@ def slim(rows, fields):
 
 
 def story_run():
-    """The TinyStories run, cut to the curve the post draws, with the medians the prose quotes taken over every step."""
+    """Cut to the curve the post draws; the medians the prose quotes cover every step."""
     rows = _read_jsonl(RUNS / "tinystories" / "metrics.jsonl")
     evals = [r for r in rows if r.get("val_loss") is not None]
     train = downsample([r for r in rows if r.get("val_loss") is None], CURVE_POINTS - len(evals))
@@ -56,13 +44,12 @@ def story_run():
 
 
 def attention(patterns):
-    """Each head's causal weights as integers in thousandths, lower triangle only: the server rounds them to 3 decimals."""
+    """Lower triangle in integer thousandths: the server rounds weights to 3 decimals."""
     return [{"tokens": p["tokens"], "layers": [[[[round(w * 1000) for w in row[: i + 1]] for i, row in enumerate(head)]
                                                  for head in layer] for layer in p["layers"]]} for p in patterns]
 
 
 def prose_drift(port):
-    """A diff of every section's paragraphs, whitespace aside, between ui/src/post and the port's copy; empty if they match."""
     def paragraphs(f):
         return [" ".join(p.split()) for p in PARAGRAPH.findall(f.read_text())]
     drift = []

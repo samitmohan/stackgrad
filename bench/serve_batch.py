@@ -1,15 +1,3 @@
-"""Serving N chats at once on the Apple GPU: one forward pass per sequence against one per step.
-
-    uv run python bench/serve_batch.py
-
-Qwen3-0.6B in bfloat16 behind the Scheduler and a 512-block KV budget, as stackgrad/serve/api.py runs
-it. N GSM8K prompts in the chat template, of different lengths, arrive together, and each decodes 128
-tokens greedily with no stop token. The runner's decode as it was before batching, one forward pass
-per sequence, runs beside the batched one (runner.py). Reports the time for all N replies, the tokens
-per second they add up to, the median decode step, and how many replies match the unbatched ones
-token for token (bfloat16 rounds a padded batch differently, so a near-tie can flip). Then the same
-match in float32, where only rounding error separates the two. Writes bench/results/serve_batch_metal.json.
-"""
 import json
 import statistics
 import sys
@@ -32,14 +20,14 @@ REPEATS = 3
 
 
 class OnePerSequence(StackgradRunner):
-    """The runner before batching: each sequence's decode is its own forward pass."""
+    """The runner before batching."""
     def decode(self, seq_ids, tokens):
         with no_grad():
             return np.stack([self.model(np.array([[t]]), self.caches[s])[0, -1].numpy() for s, t in zip(seq_ids, tokens)])
 
 
 def serve(runner, prompts):
-    """Every prompt arrives at once. Returns each step's seconds (the first prefills them all) and each reply."""
+    """Every prompt arrives at once, so the first step prefills them all."""
     s = Scheduler(runner, BlockManager(512, 16))
     requests = [Request(i, ids, MAX_NEW, temperature=0) for i, ids in enumerate(prompts)]
     for r in requests:

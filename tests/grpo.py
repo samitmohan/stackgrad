@@ -1,7 +1,3 @@
-"""GRPO's pieces: batched sampling across prompt lengths, group advantages, and the update.
-
-    uv run python tests/grpo.py
-"""
 import sys
 from pathlib import Path
 

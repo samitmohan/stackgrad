@@ -1,13 +1,4 @@
 #!/usr/bin/env python3
-"""Gradient correctness check: analytic backward vs numerical finite differences.
-
-No pytest, no torch, no CI matrix. Just run it:
-
-    python test_grads.py
-
-Each check perturbs every input and compares the numerical gradient against the
-one from .backward(). Exits nonzero if any gradient is wrong.
-"""
 import numpy as np
 
 from stackgrad import (
@@ -49,8 +40,6 @@ def check(name):
     return register
 
 
-# arithmetic
-
 @check("add")
 def _():
     a, b = randt(3, 4), randt(3, 4)
@@ -87,8 +76,6 @@ def _():
     check_gradient(lambda: (-a).sum(), [a])
 
 
-# broadcasting
-
 @check("add-broadcast")
 def _():
     a, b = randt(3, 4), randt(4)
@@ -100,8 +87,6 @@ def _():
     a, b = randt(3, 4), randt(1, 4)
     check_gradient(lambda: (a * b).sum(), [a, b])
 
-
-# matmul
 
 @check("matmul-2d")
 def _():
@@ -120,8 +105,6 @@ def _():
     a, b = randt(4, 3, 5), randt(5, 2)
     check_gradient(lambda: (a @ b).sum(), [a, b])
 
-
-# reductions
 
 @check("sum-axis")
 def _():
@@ -147,8 +130,6 @@ def _():
     check_gradient(lambda: a.min().sum(), [a])
 
 
-# elementwise
-
 @check("exp")
 def _():
     a = randt(3, 4)
@@ -160,8 +141,6 @@ def _():
     a = randt(3, 4, positive=True)
     check_gradient(lambda: a.log().sum(), [a])
 
-
-# shape
 
 @check("reshape")
 def _():
@@ -219,8 +198,6 @@ def _():
     check_gradient(lambda: (a.abs() ** 2).sum(), [a])
 
 
-# activations
-
 @check("relu")
 def _():
     a = randt(3, 4)
@@ -257,8 +234,6 @@ def _():
     check_gradient(lambda: F.log_softmax(a, axis=-1).sum(), [a])
 
 
-# layers
-
 @check("linear")
 def _():
     layer = Linear(5, 3)
@@ -270,7 +245,7 @@ def _():
 def _():
     ln = LayerNorm(6)
     x = randt(3, 6)
-    w = Tensor(np.random.randn(3, 6))  # with a plain .sum() the true input gradient is exactly 0, which hides a wrong one
+    w = Tensor(np.random.randn(3, 6))  # a plain .sum() gives a zero input grad, which would hide a wrong one
     check_gradient(lambda: (ln(x) * w).sum(), [x, ln.gamma, ln.beta])
 
 
@@ -278,7 +253,7 @@ def _():
 def _():
     bn = BatchNorm1d(4)
     x = randt(8, 4)
-    w = Tensor(np.random.randn(8, 4))  # as for layernorm: a plain .sum() makes the input gradient 0
+    w = Tensor(np.random.randn(8, 4))  # same as layernorm: a plain .sum() gives a zero input grad
     check_gradient(lambda: (bn(x) * w).sum(), [x, bn.gamma, bn.beta])
 
 
@@ -343,7 +318,7 @@ def _():
 
 @check("attention-head-dim-8")
 def _():
-    # head_dim 8, the smallest the Metal kernels take: tests/backends.py runs this through them
+    # head_dim 8 is the smallest the Metal kernels take; tests/backends.py runs this through them
     attn = Attention(16, n_heads=2, n_kv_heads=1)
     x = randt(1, 3, 16)
     params = [attn.q_proj.weight, attn.k_proj.weight, attn.v_proj.weight, attn.o_proj.weight]
@@ -352,9 +327,7 @@ def _():
 
 @check("attention-left-padding")
 def _():
-    # the key mask every GRPO update backpropagates through: batch row 1's first two positions are padding. The loss
-    # covers real positions only, as every training loss here does; a padding query's scores sit near -1e9, where
-    # float64's spacing (~1e-7) is too coarse for a finite difference, and its output is never used
+    # padding queries stay out of the loss: their scores sit near -1e9, too coarse for a float64 finite difference
     from stackgrad.attention import scaled_dot_product_attention
     q, k, v = randt(2, 2, 4, 4), randt(2, 2, 4, 4), randt(2, 2, 4, 4)
     real = np.ones((2, 1, 4, 1))
@@ -372,7 +345,7 @@ def _():
 
 @check("attention-non-causal")
 def _():
-    # cross-attention, as Stable Diffusion's UNet uses it: every query sees all 6 keys
+    # cross-attention as in Stable Diffusion's UNet: every query sees all 6 keys
     from stackgrad.attention import scaled_dot_product_attention
     q, k, v = randt(1, 2, 3, 4), randt(1, 2, 6, 4), randt(1, 2, 6, 4)
     check_gradient(lambda: (scaled_dot_product_attention(q, k, v, causal=False) ** 2).sum(), [q, k, v])
@@ -394,8 +367,6 @@ def _():
     targets = np.array([[4, 4, 9, 1], [2, 7, 3, 3]])
     check_gradient(lambda: cross_entropy_loss(lm(idx), targets), lm.parameters())
 
-
-# losses
 
 @check("mse_loss")
 def _():

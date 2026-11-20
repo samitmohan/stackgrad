@@ -1,14 +1,3 @@
-"""Where the time goes: each primitive's forward and backward, timed one by one.
-
-    with profile() as p:
-        loss = model(x)...; loss.backward()
-    print(p.table())
-
-The device finishes each op before the clock stops (GPUs otherwise run ops asynchronously,
-and a lazy backend like MLX would run them all at the end), so the times add up honestly but
-the total runs slower than an unprofiled step. Wall time minus the ops' sum is everything
-between them: Python, the autograd bookkeeping, and starting each op.
-"""
 import time
 from collections import defaultdict
 
@@ -17,7 +6,6 @@ from . import tensor as T
 
 
 def _wait(device, out):
-    """Block until the device has finished computing out."""
     if device == "cuda":
         import cupy
         cupy.cuda.Device().synchronize()
@@ -26,6 +14,7 @@ def _wait(device, out):
 
 
 class profile:
+    """Times each primitive's forward and backward, syncing the device after each, so the total runs slower."""
     def __init__(self):
         self.ms = defaultdict(float)
         self.calls = defaultdict(int)

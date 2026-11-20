@@ -1,15 +1,3 @@
-"""Group-wise weight quantization: int8 or int4 weights, dequantized inside the matmul.
-
-A weight is stored (out, in), as MLX stores it. Each output row is cut into groups of
-`group` inputs, and a group keeps a float scale and bias beside its integers:
-
-    w = scale * q + bias,    q in [0, 2^bits)
-
-Integers pack 32 // bits to a uint32 word, low bits first: MLX's layout, so
-mx.quantized_matmul can check this module on the very same bytes. Decoding one token
-reads every weight once, so its speed is set by bytes per weight: 2 for bfloat16,
-about 1.06 for int8 and 0.56 for int4 once the scales and biases are counted.
-"""
 import numpy as np
 
 from . import backend
@@ -19,7 +7,7 @@ from .tensor import Tensor
 
 
 def quantize(w, bits=4, group=64):
-    """w: (out, in) float array -> packed uint32 (out, in * bits / 32), scales and biases (out, in / group)."""
+    """w (out, in) -> packed uint32 (out, in * bits / 32), scales, biases (out, in / group), in MLX's layout."""
     n_out, n_in = w.shape
     assert 32 % bits == 0 and n_in % group == 0 and group % (32 // bits) == 0, (w.shape, bits, group)
     g = w.astype(np.float32).reshape(n_out, n_in // group, group)
@@ -40,11 +28,7 @@ def dequantize(packed, scales, biases, bits, group, xp):
 
 
 class QuantLinear(Module):
-    """An inference-only Linear (no bias) with group-quantized weights.
-
-    Quantize after moving the model (quantize_model): the packed integers are raw backend
-    arrays, outside the Tensor machinery that would cast them to float.
-    """
+    """Inference-only, bias-free Linear with group-quantized weights; build it after moving the model."""
     def __init__(self, weight, bits, group):
         super().__init__()
         xp = backend.get(weight.device)
@@ -70,11 +54,7 @@ class QuantLinear(Module):
 
 
 def quantize_model(model, bits=4, group=64):
-    """Replace every matmul of a TransformerLM by a QuantLinear, the output head included.
-
-    A tied head gets its own quantized copy of the embedding table; the lookup keeps reading
-    the full-precision table, one row per token.
-    """
+    """Replaces every TransformerLM matmul, head included, with a QuantLinear; a tied head gets its own copy."""
     for block in model.blocks:
         for parent in (block.attn, block.ffn):
             for name, val in list(parent.__dict__.items()):

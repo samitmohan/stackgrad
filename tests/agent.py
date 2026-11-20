@@ -1,7 +1,3 @@
-"""The agent's calculator (apps/agent.py): arithmetic works, and model-written text never runs as code.
-
-    uv run python tests/agent.py
-"""
 import sys
 import time
 from pathlib import Path

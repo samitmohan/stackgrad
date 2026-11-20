@@ -1,20 +1,3 @@
-"""A calculator agent on stackgrad's server (SPEC.md M5): Qwen3-0.6B solves GSM8K with a tool for arithmetic.
-
-    uv run uvicorn stackgrad.serve.api:app --port 8000     # the server, if it is not already up
-    uv run python apps/agent.py                            # writes bench/results/gsm8k_agent.json
-
-Each problem is a conversation through the server's OpenAI-shaped endpoint. The model sees the
-problem and a calculator tool; when it writes <tool_call>{"name": "calculator", "arguments":
-{"expression": ...}}</tool_call> and ends its turn, the agent evaluates the expression and sends
-the value back as a tool message, until the model replies without calling the tool. Otherwise the
-protocol is bench/gsm8k.py's: the first --n test problems, greedy, thinking off, 320 new tokens per
-reply, the final number against the reference.
-
-The user turn asks for the tool. With bench/gsm8k.py's prompt, which says "Solve it step by step",
-the model called the calculator 0 times in 250 problems (bench/results/gsm8k_agent_step_by_step.json)
-whatever the system message said, and Hugging Face's Qwen3-0.6B does the same on that prompt. Every call to the model is timed and its prompt and
-reply tokens are kept, so the results also show where an answer's time goes.
-"""
 import argparse
 import ast
 import functools
@@ -34,17 +17,14 @@ TOOLS = [{"type": "function", "function": {
     "name": "calculator", "description": "Evaluate an arithmetic expression with + - * / ** and parentheses, e.g. 48 * (7 - 2)",
     "parameters": {"type": "object", "properties": {"expression": {"type": "string"}}, "required": ["expression"]}}}]
 SYSTEM = "You cannot do arithmetic yourself. For every calculation, call the calculator tool and use the result it returns."
+# with "Solve it step by step" the model called the tool 0 times in 250 problems (bench/results/gsm8k_agent_step_by_step.json)
 PROMPT = "{question}\nUse the calculator tool for each calculation, then give the final answer on its own line as: #### <number>"
 OPS = {ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul, ast.Div: operator.truediv,
        ast.FloorDiv: operator.floordiv, ast.Pow: operator.pow, ast.USub: operator.neg, ast.UAdd: operator.pos}
 
 
 def calculate(expression):
-    """The value of an arithmetic expression, or an error the model can read.
-
-    The text comes from the model, so it is parsed, never executed: numbers and arithmetic operators
-    only, and small exponents, so no expression can name a function or take minutes to compute.
-    """
+    """Model text: parsed against an allowlist, never eval'd, and exponents capped so nothing runs for minutes."""
     def value(node):
         if isinstance(node, ast.Constant) and type(node.value) in (int, float):
             return float(node.value)  # floats overflow to an error where ints grow without bound: ((9**64)**64)**64
@@ -58,8 +38,8 @@ def calculate(expression):
         raise ValueError("only numbers and + - * / ** ( ) are allowed")
 
     try:
-        # GSM8K writes money and thousands as $1,250 and percents as 20% or 20% of 40. shortcut: a bare percent is a number,
-        # so 80 + 150% is 81.5, never 80 raised by 150%; the model wrote that once in 250 problems (bench/results/gsm8k_agent_replies.jsonl)
+        # GSM8K writes $1,250, 20% and 20% of 40
+        # shortcut: a bare percent is a number, so 80 + 150% is 81.5, not 200; the model wrote that once in 250 problems
         text = expression.replace(",", "").replace("$", "").replace("%", "/100").replace("of", "*")
         result = value(ast.parse(text, mode="eval").body)
         return str(round(result, 6)).removesuffix(".0")
@@ -68,7 +48,6 @@ def calculate(expression):
 
 
 def chat(server, messages):
-    """One call to the server: (reply text, prompt tokens, reply tokens, seconds)."""
     body = json.dumps({"messages": messages, "tools": TOOLS, "temperature": 0, "max_tokens": 320}).encode()
     request = urllib.request.Request(f"{server}/v1/chat/completions", body, {"content-type": "application/json"})
     start = time.perf_counter()
@@ -79,10 +58,6 @@ def chat(server, messages):
 
 
 def solve(ask, question, max_turns=8):
-    """The conversation for one problem: its final reply, and a trace of every model call and tool call.
-
-    ask(messages) -> (reply, prompt tokens, reply tokens, seconds): the HTTP client below, or the server's own engine.
-    """
     messages = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": PROMPT.format(question=question)}]
     trace = []
     for _ in range(max_turns):
@@ -101,7 +76,7 @@ def solve(ask, question, max_turns=8):
                 result = 'error: write {"name": "calculator", "arguments": {"expression": "..."}}'
             trace.append({"kind": "tool", "expression": call, "result": result, "seconds": round(time.perf_counter() - start, 6)})
             messages.append({"role": "tool", "content": result})
-    return "", trace  # never answered within max_turns
+    return "", trace
 
 
 def main():

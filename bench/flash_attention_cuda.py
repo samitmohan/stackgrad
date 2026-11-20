@@ -1,12 +1,3 @@
-"""Causal attention on the RTX 3090: the Triton FlashAttention-2 kernels against the composed math.
-
-    CUPY_TF32=1 uv run --no-dev python bench/flash_attention_cuda.py    # bqa3
-
-"composed" is mlops.Attention's own math (the score matrix written, softmaxed, and read back)
-run on a CUDA namespace without the fused kernels; "Triton" is backend/cuda_attention.py.
-Each is timed forward alone and forward plus backward, at the shapes bench/flash_attention.py
-uses on the Mac. Writes bench/results/flash_attention_cuda.json.
-"""
 import json
 import sys
 import time
@@ -40,7 +31,6 @@ def forward_backward(xp, parents, dout):
 
 
 def per_call(fn, *args):
-    """Milliseconds per call, the device finished each time."""
     fn(*args)
     cp.cuda.Device().synchronize()
     times = []

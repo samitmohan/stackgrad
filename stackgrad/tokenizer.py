@@ -1,9 +1,3 @@
-"""Byte-level BPE (the GPT-2 scheme): train merges on a corpus, encode and decode with them.
-
-Text is cut into pre-tokens (a word with its leading space, a digit run, a
-punctuation run, whitespace) by the GPT-2 regex. Merges never cross a pre-token
-or a special token, so each pre-token is encoded on its own and cached.
-"""
 import itertools
 import json
 import os
@@ -17,7 +11,7 @@ PAT = re.compile(r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\
 
 
 def _special_splitter(special_tokens):
-    # longest first, so "<|eot|><|eot|>" registered as one token wins over two "<|eot|>"
+    # longest first, so "<|eot|><|eot|>" registered as one token beats two "<|eot|>"
     alternatives = "|".join(re.escape(s) for s in sorted(special_tokens, key=len, reverse=True))
     return re.compile(f"({alternatives})") if special_tokens else None
 
@@ -55,7 +49,6 @@ def train_bpe(input_path, vocab_size, special_tokens, num_workers=None):
         for c in pool.imap_unordered(_count_pretokens, jobs):
             counts.update(c)
 
-    # each distinct pre-token becomes a list of single-byte tokens, weighted by how often it occurs
     words = [[bytes([b]) for b in w.encode("utf-8")] for w in counts]
     freqs = list(counts.values())
     pair_counts = Counter()
@@ -70,7 +63,7 @@ def train_bpe(input_path, vocab_size, special_tokens, num_workers=None):
         vocab[len(vocab)] = s.encode("utf-8")
     merges = []
     while len(vocab) < vocab_size and pair_counts:
-        # most frequent pair, ties broken by the lexicographically greater pair
+        # ties go to the lexicographically greater pair
         # shortcut: O(distinct pairs) scan per merge; switch to a lazy max-heap if training time matters
         best = max(pair_counts, key=lambda p: (pair_counts[p], p))
         a, b = best
@@ -103,8 +96,7 @@ def _merge(word, a, b):
 
 
 class Tokenizer:
-    """Byte-level BPE. `pattern` splits text into pre-tokens (GPT-2's PAT by default); `nfc`
-    normalizes text to Unicode NFC first, as Qwen's tokenizer does."""
+    """Byte-level BPE; pattern splits text into pre-tokens, nfc normalizes to Unicode NFC first (as Qwen does)."""
     def __init__(self, vocab, merges, special_tokens=None, pattern=PAT, nfc=False):
         self.pattern, self.nfc = pattern, nfc
         self.vocab = dict(vocab)
@@ -129,7 +121,6 @@ class Tokenizer:
         return cls(vocab, merges, special_tokens, **options)
 
     def _bpe(self, token, steps=None):
-        """Merge the bytes of one pre-token, lowest-rank pair first. Records each stage in `steps` if given."""
         word = [bytes([b]) for b in token]
         while True:
             if steps is not None:
@@ -159,11 +150,7 @@ class Tokenizer:
         return ids
 
     def encode_iterable(self, iterable):
-        """Encode lazily, one string (e.g. a file line) at a time, in constant memory.
-
-        Each string's last pre-token waits for the next string: more text can
-        change how it splits (a trailing "  \\n" becomes "  " + "\\n" if a word follows).
-        """
+        """Encodes in constant memory, holding back each string's last pre-token, which more text can resplit."""
         carry = ""
         for text in iterable:
             text = carry + text

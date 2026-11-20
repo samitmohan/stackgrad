@@ -1,7 +1,3 @@
-"""The CS336 ablation switches on TransformerLM, and attn_res: each variant builds, trains, and SiLU matches SwiGLU's size.
-
-    uv run python tests/ablations.py
-"""
 import sys
 import tempfile
 from pathlib import Path
@@ -24,12 +20,12 @@ def main():
     sizes, first = {}, {}
     for name, opts in VARIANTS.items():
         opts = {"d_ff": 128} | opts  # SwiGLU's 128 is 8/3 x 48, the CS336 ratio
-        np.random.seed(1)  # the same draws for every variant, so a switch the model ignored shows as an identical first loss
+        np.random.seed(1)  # same draws for every variant, so an ignored switch shows as an identical first loss
         model = TransformerLM(vocab_size=40, context_length=64, d_model=D, n_layers=2, n_heads=4, **opts)
         sizes[name] = sum(p.data.size for p in model.parameters())
         opt = AdamW(model.parameters(), lr=3e-3)
         losses = []
-        for _ in range(40):  # memorize one batch: every variant should manage that
+        for _ in range(40):  # every variant should memorize one batch
             loss = cross_entropy_loss(model(idx), np.roll(idx, -1, axis=1))
             opt.zero_grad()
             loss.backward()
@@ -45,7 +41,7 @@ def main():
     assert ffn_gap < 0.02, ffn_gap
     print(f"[ok]   SiLU at d_ff = 4 d_model is within {ffn_gap:.1%} of SwiGLU's parameter count")
 
-    # a variant's checkpoint must not load into another variant: it would run in part on random weights
+    # a checkpoint must not load into another variant: it would run partly on random weights
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / "silu.npz"
         TransformerLM(97, 16, 32, 2, 4, 64, ffn="silu").save(path)
@@ -56,7 +52,7 @@ def main():
             assert "does not match" in str(e), e
     print("[ok]   a SiLU checkpoint is refused by a SwiGLU model, by name")
 
-    # Attention Residuals starts from an average: with its query at zero, every source gets the same weight
+    # Attention Residuals starts as an average: with a zero query every source gets the same weight
     sources = [Tensor(np.random.randn(2, 3, D)) for _ in range(3)]
     gap = np.abs(DepthAttention(D)(sources).numpy() - np.mean([s.numpy() for s in sources], axis=0)).max()
     assert gap < 1e-12, gap

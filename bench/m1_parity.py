@@ -1,10 +1,3 @@
-"""Loss-curve parity: the same small LM trained by stackgrad and by PyTorch, step for step.
-
-Both start from the same weights, see the same batches, and use the same AdamW,
-cosine schedule, and clipping. Writes bench/results/m1_parity.json and a plot.
-
-    uv run python bench/m1_parity.py --steps 200
-"""
 import argparse
 import json
 import sys
@@ -29,7 +22,7 @@ RESULTS = Path(__file__).resolve().parent / "results"
 
 
 def torch_forward(P, idx, n_layers, n_heads):
-    """TransformerLM in plain torch over the same state_dict names; Linear weights are (in, out) like stackgrad."""
+    """Plain torch over the same state_dict names; Linear weights are (in, out) as in stackgrad."""
     def rms(x, w):
         return TF.rms_norm(x, (x.shape[-1],), w, eps=1e-5)
 

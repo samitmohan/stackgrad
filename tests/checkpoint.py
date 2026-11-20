@@ -1,7 +1,3 @@
-"""Activation checkpointing (stackgrad/checkpoint.py): the same loss and gradients, in less memory.
-
-    uv run python tests/checkpoint.py
-"""
 import sys
 from pathlib import Path
 
@@ -15,7 +11,6 @@ CONFIG = {"vocab_size": 50, "context_length": 64, "d_model": 32, "n_layers": 3, 
 
 
 def grads(model, idx, checkpointing, cast=None):
-    """The loss and every trainable weight's gradient, with or without checkpointing."""
     model.checkpoint_blocks = checkpointing
     for p in model.parameters():
         p.grad = None

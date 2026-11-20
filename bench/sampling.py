@@ -1,14 +1,3 @@
-"""Does sampling on the GPU draw what an exact sampler would? (stackgrad/sampling.py)
-
-    CUPY_TF32=1 uv run --no-dev python bench/sampling.py --device cuda    # bqa3
-
-Decodes one GRPO-shaped batch of Qwen3-0.6B (8 GSM8K problems x 8 replies, 320 tokens) and,
-at every step, draws each row's token three ways from the same uniform number: an exact
-float64 inverse CDF on the host, sample_on_device's first crossing of the device's float32
-running sum, and the count of positions below the draw that it replaced. Decoding follows
-the exact picks. Writes bench/results/sampling_<device>.json with how often each device
-method disagrees with the exact one, and how often that disagreement lands on a token below 1e-6.
-"""
 import argparse
 import json
 import sys

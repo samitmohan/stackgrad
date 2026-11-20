@@ -1,10 +1,3 @@
-"""GPT-2 in stackgrad (examples/gpt2.py) against Hugging Face's transformers.
-
-    uv run python tests/gpt2.py
-
-Logits for one prompt on the CPU and the Apple GPU, and 40 greedy tokens, all in float32.
-Writes bench/results/gpt2_parity.json.
-"""
 import json
 import sys
 from pathlib import Path

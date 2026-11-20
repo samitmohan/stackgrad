@@ -1,18 +1,8 @@
-"""Matmul against group-quantized weights as one Metal kernel, for decoding (few rows of x).
-
-    x (M, K) @ W.T, with W (N, K) stored packed as quant.py describes   ->   (M, N)
-
-Decode is a matrix-vector product: every weight is read once and used once, so the
-kernel's job is to read as few bytes as possible. One simdgroup owns one output column;
-its 32 lanes stride over that row's packed words (neighbouring lanes read neighbouring
-words, one coalesced load), unpack each word in registers, and meet in a simd_sum.
-Within a group, sum_k x_k (s q_k + b) = s * sum_k x_k q_k + b * sum_k x_k, so the scale
-and bias are applied once per word instead of once per weight.
-"""
 import mlx.core as mx
 
 SIMDGROUPS = 8  # output columns per threadgroup
 
+# one simdgroup per output column; s * sum(x q) + b * sum(x) applies scale and bias once per word
 _SOURCE = """
     constexpr int PER_WORD = 32 / BITS, MASK = (1 << BITS) - 1;
     const int M = x_shape[0], K = x_shape[1], N = w_shape[0];

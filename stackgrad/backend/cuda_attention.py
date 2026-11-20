@@ -1,18 +1,3 @@
-"""Causal attention for the CUDA backend as Triton kernels: FlashAttention-2's forward and backward.
-
-    q (B, H, T, D), k and v (B, Hkv, S, D)  ->  out (B, H, T, D), lse (B, H, T)
-
-The contract of metal_attention.py: query row i sits at absolute position S - T + i and sees
-keys 0 .. S - T + i, query head h reads kv head h // (H / Hkv), the scale is 1/sqrt(D), and
-lse is each row's log-sum-exp of scores. Triton kernels are Python functions that Triton
-compiles for the GPU; each program instance handles one block of rows.
-
-Forward: a program owns BLOCK_M query rows and streams BLOCK_N keys at a time through an
-online softmax, so the (T, S) score matrix never reaches memory. Backward (Dao 2023): the
-softmax weights are rebuilt block by block from q, k and lse instead of being stored. One
-pass owns a block of keys and sums dK and dV over the query rows that see it; a second owns
-a block of queries and sums dQ. Both use dS = P * (dP - rowsum(dO * O)).
-"""
 import math
 import os
 
@@ -20,12 +5,12 @@ import cupy as cp
 import triton
 import triton.language as tl
 
-# the precision CuPy's matmuls use: TF32 tensor cores only when CUPY_TF32=1 (training), full float32 otherwise (tests)
+# match CuPy's matmuls: tf32 only under CUPY_TF32=1 (training), ieee float32 otherwise (tests)
 _PRECISION = "tf32" if os.environ.get("CUPY_TF32") == "1" else "ieee"
 
 
 class _Arg:
-    """What Triton reads from a tensor argument, its address and element type, so CuPy arrays need no torch."""
+    """The data_ptr and dtype Triton reads from a tensor, so CuPy arrays need no torch."""
     def __init__(self, a):
         self.a, self.dtype = a, a.dtype
 
@@ -84,7 +69,7 @@ def _backward_kv(Q, K, V, DO, LSE, DELTA, DK, DV, T, S, H, HKV, scale,
         dv += tl.dot(tl.trans(p), do, input_precision=PREC)
         ds = p * (tl.dot(do, tl.trans(v), input_precision=PREC) - delta[:, None])
         dk += tl.dot(tl.trans(ds), q, input_precision=PREC) * scale
-    # per query head; the caller sums each group of query heads into its kv head
+    # per query head; the caller sums each group into its kv head
     tl.store(DK + (bh * S + cols[:, None]) * D + dims[None, :], dk, mask=cols[:, None] < S)
     tl.store(DV + (bh * S + cols[:, None]) * D + dims[None, :], dv, mask=cols[:, None] < S)
 
@@ -113,7 +98,7 @@ def _backward_q(Q, K, V, DO, LSE, DELTA, DQ, T, S, H, HKV, scale, D: tl.constexp
 
 
 def _blocks(D):
-    # 128-wide heads at 64 x 32 need 114,688 bytes of shared memory in a kernel; the 3090 has 101,376
+    # D=128 at 64x32 blocks needs 114,688 B of shared memory; the 3090 has 101,376
     return (64, 64) if D <= 64 else (32, 32)
 
 
@@ -123,7 +108,7 @@ def supported(q):
 
 
 def attention(q, k, v):
-    """Causal attention forward. Returns (out, lse); see the module docstring for shapes."""
+    """Causal FlashAttention-2: q (B, H, T, D), k, v (B, Hkv, S, D) -> out (B, H, T, D), lse (B, H, T)."""
     B, H, T, D = q.shape
     S, Hkv = k.shape[2], k.shape[1]
     q, k, v = (cp.ascontiguousarray(x) for x in (q, k, v))
@@ -135,7 +120,7 @@ def attention(q, k, v):
 
 
 def attention_backward(q, k, v, out, lse, dout):
-    """Gradients (dq, dk, dv) of attention(q, k, v)[0] given dout = dL/d(out), from the forward's out and lse."""
+    """(dq, dk, dv) of attention(q, k, v)[0] given dout, rebuilding the softmax from out and lse."""
     B, H, T, D = q.shape
     S, Hkv = k.shape[2], k.shape[1]
     q, k, v, out, dout = (cp.ascontiguousarray(x) for x in (q, k, v, out, dout))
@@ -146,7 +131,7 @@ def attention_backward(q, k, v, out, lse, dout):
     args = (T, S, H, Hkv, 1 / math.sqrt(D))
     _backward_kv[(triton.cdiv(S, bn), B * H)](*map(_Arg, (q, k, v, dout, lse, delta, dk, dv)), *args, D=D, BLOCK_M=bm, BLOCK_N=bn, PREC=_PRECISION,
                                               num_stages=1)
-    # one pipeline stage: the backward kernels hold more tiles than the forward, and three stages overflow shared memory
+    # one pipeline stage: the backward holds more tiles, and three stages overflow shared memory
     _backward_q[(triton.cdiv(T, bm), B * H)](*map(_Arg, (q, k, v, dout, lse, delta, dq)), *args, D=D, BLOCK_M=bm, BLOCK_N=bn, PREC=_PRECISION,
                                              num_stages=1)
     rep = H // Hkv

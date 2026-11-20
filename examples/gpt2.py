@@ -1,14 +1,3 @@
-"""GPT-2 in stackgrad: OpenAI's 124M-parameter model from 2019, loaded from Hugging Face.
-
-    uv run python examples/gpt2.py
-    uv run python examples/gpt2.py --device metal --prompt "The meaning of life is"
-
-One file, like tinygrad's examples/gpt2.py. GPT-2 predates the pieces TransformerLM uses
-(RMSNorm, RoPE, SwiGLU), so it gets its own small model: learned position embeddings,
-LayerNorm, a bias on every projection, and a GELU feed-forward. Module names follow the
-checkpoint's, so loading is a name lookup. tests/gpt2.py checks it against transformers.
-Weights: huggingface_hub.snapshot_download("openai-community/gpt2", local_dir="data/gpt2").
-"""
 import argparse
 import json
 import re
@@ -32,7 +21,7 @@ class Attention(Module):
     def __init__(self, d, n_heads):
         super().__init__()
         self.n_heads = n_heads
-        self.c_attn = Linear(d, 3 * d)  # queries, keys, and values from one matrix
+        self.c_attn = Linear(d, 3 * d)
         self.c_proj = Linear(d, d)
 
     def forward(self, x, cache=None):
@@ -77,7 +66,6 @@ class GPT2(Module):
         self.ln_f = LayerNorm(d, eps)
 
     def forward(self, idx, caches=None):
-        """idx (B, T) -> logits (B, T, vocab). The output layer reuses the token embedding table."""
         start = 0 if caches is None else len(caches[0])
         x = self.wte(idx) + self.wpe(np.arange(start, start + idx.shape[1]))
         for i, block in enumerate(self.h):
@@ -86,14 +74,13 @@ class GPT2(Module):
 
 
 def load_gpt2(path):
-    """GPT-2 from a Hugging Face directory; refuses to run if any name or shape differs from the checkpoint's."""
     c = json.loads((Path(path) / "config.json").read_text())
     model = GPT2(c["vocab_size"], c["n_positions"], c["n_embd"], c["n_layer"], c["n_head"], c["layer_norm_epsilon"])
-    # h.<i>.attn.bias (and masked_bias in older files) is the causal mask, saved as a buffer, not a weight
+    # attn.bias (masked_bias in older files) is the saved causal mask buffer, not a weight
     weights = {k: v for k, v in load_safetensors(Path(path) / "model.safetensors").items()
                if not re.fullmatch(r"h\.\d+\.attn\.(masked_)?bias", k)}
     params = dict(model.named_parameters())
-    hf_name = {name: name.replace(".gamma", ".weight").replace(".beta", ".bias") for name in params}  # LayerNorm's names
+    hf_name = {name: name.replace(".gamma", ".weight").replace(".beta", ".bias") for name in params}  # HF's LayerNorm names
     assert sorted(hf_name.values()) == sorted(weights), sorted(set(weights) ^ set(hf_name.values()))
     for name, p in params.items():
         w = weights[hf_name[name]]
@@ -107,7 +94,6 @@ def load_tokenizer(path):
 
 
 def generate(model, ids, max_new, temperature, eos):
-    """ids extended by up to max_new sampled tokens, stopping at eos. temperature=0 is greedy."""
     assert len(ids) + max_new <= model.wpe.weight.shape[0], "GPT-2 sees at most 1,024 positions"
     caches = [KVCache() for _ in model.h]
     out = []
@@ -135,7 +121,7 @@ def main():
     np.random.seed(args.seed)
     tok = load_tokenizer(args.model)
     model = load_gpt2(args.model).to(args.device)
-    ids = tok.encode(args.prompt) or [tok.ids[b"<|endoftext|>"]]  # an empty prompt starts from end-of-text
+    ids = tok.encode(args.prompt) or [tok.ids[b"<|endoftext|>"]]
     print(args.prompt + tok.decode(generate(model, ids, args.max_new, args.temperature, tok.ids[b"<|endoftext|>"])))
 
 

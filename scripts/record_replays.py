@@ -1,11 +1,3 @@
-"""Record the post's live figures against a running server, for a static copy of the post that replays them.
-
-Start the server first (uv run uvicorn stackgrad.serve.api:app --port 8000), then:
-    uv run python scripts/record_replays.py
-Writes bench/replays/<figure>.json. Each request is the one the live figure sends; the chat records when each streamed
-chunk arrived, so a replay can show the reply at the speed it was written.
-"""
-
 import argparse
 import json
 import time
@@ -56,7 +48,7 @@ def post(url, body, timeout=600):
 
 
 def chat(url, text):
-    """One streamed reply, as the Chat figure sends it: [(seconds since the request, text added)], and the usage."""
+    """One streamed reply, sent as the Chat figure sends it."""
     body = {"messages": [{"role": "user", "content": text}], "stream": True, "max_tokens": 400, "temperature": 0.7}
     req = urllib.request.Request(url + "/v1/chat/completions", json.dumps(body).encode(), {"content-type": "application/json"})
     start = time.perf_counter()

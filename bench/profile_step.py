@@ -1,12 +1,3 @@
-"""Where one training step of the story model goes, op by op (CS336 A2's profiling, with stackgrad's own profiler).
-
-    uv run python bench/profile_step.py --device metal
-    CUPY_TF32=1 uv run --no-dev python bench/profile_step.py --device cuda    # bqa3
-
-The CS336 configuration (22.7M parameters) at batch 32 x 256 tokens: the step's normal time,
-then forward and backward under stackgrad.profile, which finishes each op before timing the
-next. Writes bench/results/profile_<device>.json with every op's calls and milliseconds.
-"""
 import argparse
 import json
 import sys

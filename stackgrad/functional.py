@@ -1,4 +1,3 @@
-"""Activations as compositions of Tensor ops. None of them define a gradient."""
 import math
 
 
@@ -25,7 +24,7 @@ def gelu(x):
 
 
 def softmax(x, axis=-1):
-    """Softmax over `axis`. Numerically stable via max-subtraction."""
+    """Softmax over `axis`, max-subtracted so `exp` cannot overflow."""
     # softmax is shift-invariant, so the subtracted max needs no gradient
     e = (x - x.max(axis=axis, keepdims=True).detach()).exp()
     return e / e.sum(axis=axis, keepdims=True)

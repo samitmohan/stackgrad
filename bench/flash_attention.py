@@ -1,13 +1,3 @@
-"""Causal attention forward on the M4 GPU: my three Metal kernels against the
-materialized-scores version and MLX's own fused kernel (the oracle).
-
-    uv run python bench/flash_attention.py
-
-Shapes: the CS336 training step, a Qwen3-0.6B-shaped prefill (GQA 16/8 heads,
-D=128), and a batch of 8 decode steps against a 2048-token cache. TFLOP/s counts
-only the causal half; GB/s counts reading Q, K, V and writing O once, the
-minimum any kernel must move. Writes bench/results/flash_attention.json.
-"""
 import json
 import subprocess
 import sys
@@ -30,7 +20,6 @@ SHAPES = [  # name, B, H, Hkv, T, S, D
 
 
 def materialized(q, k, v):
-    """The textbook version: the whole (T, S) score matrix goes through memory."""
     _, H, T, D = q.shape
     S, rep = k.shape[2], H // k.shape[1]
     k, v = mx.repeat(k, rep, axis=1), mx.repeat(v, rep, axis=1)
@@ -48,7 +37,7 @@ IMPLS = {
 
 
 def per_call(fn, q, k, v, calls=10):
-    """Seconds per call, with `calls` launches queued per sync so the ~140 us sync is amortized."""
+    """Queues `calls` launches per sync to amortize the ~140 us sync."""
     mx.eval(fn(q, k, v))
     times = []
     while sum(times) < 0.5 or len(times) < 3:

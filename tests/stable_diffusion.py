@@ -1,12 +1,3 @@
-"""Stable Diffusion in stackgrad (examples/stable_diffusion.py) against transformers and diffusers.
-
-    uv run python tests/stable_diffusion.py
-
-One piece at a time, so only one network sits in memory: the tokenizer's ids and the DDIM schedule
-and step (exact), then CLIP's 77 vectors, the UNet's noise prediction, and the VAE's decode, all
-float32, on the CPU and the Apple GPU. The UNet sees a 32x32 latent and the VAE a 16x16 one: every
-layer still runs, and the reference's attention stays small. Writes bench/results/sd_parity.json.
-"""
 import gc
 import json
 import sys
@@ -62,7 +53,6 @@ def check_ddim():
 
 
 def compare(name, ref, model, run, results):
-    """run(model, device) on the CPU and the GPU; record each output's error against ref, and the model's size."""
     results[f"{name}_params"] = sum(int(np.prod(p.shape)) for _, p in model.named_parameters())
     for device in ("cpu", "metal"):
         model.to(device)

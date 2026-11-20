@@ -1,11 +1,3 @@
-"""TinyStories data: download, train the 10k BPE, encode to uint16 token files.
-
-    uv run python scripts/tinystories.py download
-    uv run python scripts/tinystories.py train    # -> data/tinystories_bpe/{vocab.json,merges.txt}
-    uv run python scripts/tinystories.py encode   # -> data/tinystories_{train,valid}.bin
-
-Every measurement lands in bench/results/bpe.json.
-"""
 import json
 import os
 import resource
@@ -92,7 +84,6 @@ def encode():
         record(**{f"{split}_tokens": n_tokens, f"{split}_encode_mb_per_s": round(size / 2**20 / seconds, 1),
                   f"{split}_bytes_per_token": round(size / n_tokens, 3)})
 
-    # held-out round trip: valid text -> ids -> text must be byte-identical
     text = (DATA / FILES["valid"]).read_text(encoding="utf-8")
     ids = np.fromfile(DATA / "tinystories_valid.bin", dtype=np.uint16).tolist()
     record(valid_round_trip_exact=_tok.decode(ids) == text)

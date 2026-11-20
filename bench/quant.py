@@ -1,17 +1,3 @@
-"""What quantizing Qwen3-0.6B's weights costs in quality, and what it buys in decode speed.
-
-    uv run python bench/quant.py
-
-For bfloat16, int8, and int4 weights (group size 64) on the M4 GPU:
-- perplexity on two held-out texts: GSM8K reference solutions and TinyStories stories,
-  in 512-token windows, so the quality cost shows up as one number per text;
-- decode speed: the median time of one single-token step against a KV cache, with the three\n  precisions (and int8/int4 on MLX's kernel) taking turns step by step;
-- the bandwidth ceiling: decoding reads every weight once per token, so no decoder can beat
-  (memory bandwidth) / (bytes of weights). The bandwidth is measured here, with a large copy;
-- the matmuls alone, for one token, on Qwen3's largest and most common shapes: bfloat16, then
-  int8 and int4 through stackgrad's Metal kernel and through MLX's (the oracle).
-Writes bench/results/quant.json.
-"""
 import json
 import subprocess
 import sys
@@ -31,7 +17,7 @@ from stackgrad.qwen3 import load_qwen3, load_tokenizer
 
 RESULTS = Path(__file__).resolve().parent / "results"
 MODEL = "data/Qwen3-0.6B"
-WINDOW, WINDOWS = 512, 12  # 6,144 tokens per text
+WINDOW, WINDOWS = 512, 12
 
 
 def texts(tok):
@@ -44,7 +30,7 @@ def texts(tok):
 
 def perplexity(model, ids):
     with no_grad():
-        # logits in float32 for the loss: a bfloat16 softmax over 151,936 entries would round away the answer
+        # float32 logits for the loss: a bfloat16 softmax over 151,936 entries rounds away the answer
         losses = [cross_entropy_loss(model(np.array([ids[i:i + WINDOW]])).cast("float32"), np.array(ids[i + 1:i + WINDOW + 1])[None]).item()
                   for i in range(0, len(ids) - WINDOW, WINDOW)]
     return float(np.exp(np.mean(losses)))
@@ -94,16 +80,11 @@ def kernel_rows():
 
 
 def mlx_kernel(x, packed, scales, biases, bits, group):
-    """MLX's quantized matmul, with stackgrad's quant_matmul signature: the oracle to swap in."""
     return mx.quantized_matmul(x, packed, scales, biases, transpose=True, group_size=group, bits=bits)
 
 
 def decode_ms(models, steps=40):
-    """Median milliseconds of one single-token decode step, for each (name, model, kernel), interleaved.
-
-    The models take turns, step by step, so they all see the same machine: timing them one after
-    another lets the chip's temperature and other work move the numbers by a quarter.
-    """
+    """Interleaved step by step: timed one after another, chip temperature and other work moved the numbers by a quarter."""
     caches = {name: [KVCache() for _ in model.blocks] for name, model, _ in models}
     times = {name: [] for name, _, _ in models}
     mine = metal.quant_matmul

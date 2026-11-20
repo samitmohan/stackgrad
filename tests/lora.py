@@ -1,7 +1,3 @@
-"""LoRA: only the adapter trains, the base weights never change, and merging changes nothing.
-
-    uv run python tests/lora.py
-"""
 import sys
 import tempfile
 from pathlib import Path
@@ -38,7 +34,7 @@ def main():
     assert all(np.array_equal(base[n].data, base_state[n]) for n in base_state), "a frozen weight changed"
     print("[ok]   three AdamW steps leave every base weight bit-identical")
 
-    # one float64 adapter would turn every activation after it into float64, which an RTX 3090 runs at 1/64 of float32's rate
+    # a float64 adapter would make every later activation float64, which an RTX 3090 runs at 1/64 of float32's rate
     dtypes = {str(p.data.dtype) for p in model.parameters()} | {str(loss.dtype)}
     assert dtypes == {"float32"}, f"adapter or loss promoted to {dtypes}"
     print("[ok]   the adapter, and the loss it feeds, stay float32 through training")

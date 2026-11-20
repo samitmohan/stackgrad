@@ -1,12 +1,3 @@
-"""Group-wise quantization: the packing matches MLX's, and the Metal kernel matches mx.quantized_matmul.
-
-    uv run python tests/quant.py
-
-1. quantize -> dequantize equals mx.dequantize on the same packed bytes, so the bit layout matches MLX's.
-2. The rounding error shrinks from int4 to int8 as it should (each extra bit halves the step).
-3. The Metal decode kernel equals mx.quantized_matmul on the same bytes, for 4 and 8 bits, float32 and bfloat16.
-4. A QuantLinear gives the same output on NumPy and on Metal, decode (M <= 8) and prefill paths alike.
-"""
 import sys
 from pathlib import Path
 

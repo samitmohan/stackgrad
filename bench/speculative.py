@@ -1,13 +1,3 @@
-"""Speculative decoding on the Apple GPU: Qwen3-0.6B drafts for Qwen3-1.7B (stackgrad/speculative.py).
-
-    uv run python bench/speculative.py
-
-Greedy, bfloat16, on GSM8K prompts in the chat template: Qwen3-1.7B decoding alone, Qwen3-0.6B
-alone, and the pair at several draft lengths k. Reports tokens per second, how many drafts
-the target kept, and where each output first differs from the 1.7B's own greedy text
-(bfloat16 rounds a k-position pass differently from k single steps, so a near-tie can flip).
-Writes bench/results/speculative_metal.json.
-"""
 import json
 import sys
 import time

@@ -1,13 +1,3 @@
-"""What lazy tensors cost and skip: one training step of a small story model, lazy against eager.
-
-Eager is stackgrad's _apply as it was before tensors were lazy: every op runs the moment it is written. The two
-alternate within one process, trial by trial, so drift in the machine's speed hits both alike. Also counts the ops a
-step records and the ops it runs (the difference is work no one read), and compares the losses: the largest gap between
-an eager and a lazy run against the largest gap between two eager runs, which is not zero on a GPU that sums in a
-different order from run to run.
-
-    uv run python bench/lazy.py        # writes bench/results/lazy.json
-"""
 import inspect
 import json
 import time
@@ -28,7 +18,7 @@ LAZY = T._apply
 
 
 def eager_apply(fn, *parents, **kwargs):
-    """_apply before tensors were lazy: run primitive `fn` on `parents` now."""
+    """_apply as it was before tensors were lazy."""
     device = parents[0].device
     ctx = fn(backend.get(device), *parents)
     out = T.Tensor(ctx.forward(*[p.data for p in parents], **kwargs), device=device)
@@ -38,12 +28,11 @@ def eager_apply(fn, *parents, **kwargs):
 
 
 def use(apply):
-    """Make every op go through `apply`; attention.py imported _apply by name, so it is swapped there too."""
+    """attention.py imported _apply by name, so it is swapped there too."""
     T._apply = attention._apply = apply
 
 
 def train(device, apply, steps):
-    """`steps` training steps from the same seed: per-step milliseconds and losses."""
     use(apply)
     try:
         np.random.seed(0)
@@ -67,7 +56,6 @@ def train(device, apply, steps):
 
 
 def count_ops(device):
-    """Ops one training step records, and ops it runs."""
     counts = {"recorded": 0, "run": 0}
 
     def recording(*args, **kwargs):

@@ -1,15 +1,3 @@
-"""Model runners: the scheduler's only view of the model.
-
-    prefill(seq_id, tokens) -> logits (V,)     run a whole prefix, keep its KV cache
-    decode(seq_ids, tokens) -> logits (B, V)   one new token for each sequence, in one forward pass
-    release(seq_id)                            drop that sequence's cache
-
-Decode runs every sequence in one pass, so each weight is read once per step for the whole batch
-instead of once per sequence. Their caches differ in length, so the runner left-pads them to the
-longest and masks the padding (attention.py), as GRPO's batched sampling does. The padded caches
-stay together while the batch keeps the same members; a join or a leave splits them back into
-one cache per sequence and pads the new batch again.
-"""
 import numpy as np
 
 from .. import backend
@@ -18,6 +6,7 @@ from ..tensor import Tensor, no_grad
 
 
 class StackgradRunner:
+    """The scheduler's view of the model: prefill one sequence, decode the batch over left-padded KV caches."""
     def __init__(self, model):
         self.model = model
         self.context_length = model.context_length
@@ -28,10 +17,10 @@ class StackgradRunner:
         self.caches[seq_id] = [KVCache() for _ in self.model.blocks]
         with no_grad():
             h = self.model.hidden(np.array([tokens]), self.caches[seq_id])
-            return self.model.project(h[:, -1])[0].numpy()  # the last position only: the vocabulary-wide logits of the rest go unread
+            return self.model.project(h[:, -1])[0].numpy()  # last position only: the other logits go unread
 
     def decode(self, seq_ids, tokens):
-        # shortcut: a membership change copies every live cache twice (split, then pad); a paged attention kernel reading K/V through block tables avoids the copies
+        # shortcut: a membership change copies every live cache twice (split, pad); paged attention over block tables avoids it
         if tuple(seq_ids) != self.batch:
             self._split()
             self._join(seq_ids)
@@ -45,7 +34,6 @@ class StackgradRunner:
         self.caches.pop(seq_id, None)
 
     def _join(self, seq_ids):
-        """Move the sequences' caches into one batch, each left-padded to the longest."""
         rows = [self.caches.pop(s) for s in seq_ids]
         lengths = np.array([len(r[0]) for r in rows])
         self.pad = lengths.max() - lengths
@@ -64,7 +52,6 @@ class StackgradRunner:
         self.batch = tuple(seq_ids)
 
     def _split(self):
-        """Give each sequence in the batch its own cache back, without its padding."""
         for b, s in enumerate(self.batch):
             p = int(self.pad[b])
             self.caches[s] = []

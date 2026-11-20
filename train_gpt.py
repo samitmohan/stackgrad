@@ -1,12 +1,3 @@
-"""Train TransformerLM on uint16 token files. Defaults are the CS336 assignment 1 TinyStories run.
-
-    uv run python train_gpt.py --run tinystories                       # 40k steps x 32 x 256 = 327.68M tokens
-    uv run python train_gpt.py --run smoke --steps 300 --d-model 128 --layers 2 --heads 4 --d-ff 384
-    CUPY_TF32=1 uv run --no-dev python train_gpt.py --run tinystories --device cuda   # bqa3, RTX 3090
-
-Writes runs/<run>/config.json, metrics.jsonl (one JSON line per step, plus eval lines),
-samples.jsonl, and ckpt.npz.
-"""
 import argparse
 import json
 import time
@@ -31,7 +22,6 @@ EOT = "<|endoftext|>"
 
 
 def get_batch(data, batch_size, context):
-    """Random windows of `context` tokens; targets are the inputs shifted by one."""
     # shortcut: the data's last token is never a target; fixing it redraws the batches behind every published run
     starts = np.random.randint(0, len(data) - context - 1, size=batch_size)
     x = np.stack([data[s:s + context] for s in starts]).astype(np.int64)
@@ -58,11 +48,11 @@ def main():
     p.add_argument("--layers", type=int, default=4)
     p.add_argument("--heads", type=int, default=16)
     p.add_argument("--d-ff", type=int, default=1344)
-    # CS336 ablations; the defaults are the modern model. SiLU matches SwiGLU's parameters at --d-ff 2048 (4 x d_model)
+    # CS336 ablations: SiLU matches SwiGLU's parameter count at --d-ff 2048 (4 x d_model)
     p.add_argument("--norm", default="pre", choices=["pre", "post", "none"])
     p.add_argument("--no-rope", action="store_true")
     p.add_argument("--ffn", default="swiglu", choices=["swiglu", "silu"])
-    # mixed precision: the matrix multiplies in 16 bits, the weights in float32. float16 (CuPy has no bfloat16) scales the loss
+    # float16 is for CuPy, which has no bfloat16; it scales the loss
     p.add_argument("--amp", default=None, choices=["bfloat16", "float16"])
     p.add_argument("--batch", type=int, default=32)
     p.add_argument("--steps", type=int, default=40_000)
@@ -89,7 +79,7 @@ def main():
     model = TransformerLM(args.vocab_size, args.context, args.d_model, args.layers, args.heads, args.d_ff,
                           norm=args.norm, rope=not args.no_rope, ffn=args.ffn).to(args.device)
     params = model.parameters()
-    # 6 FLOPs per parameter per token (2 forward, 4 backward); the embedding is a lookup, not a matmul
+    # 6 FLOPs per parameter per token (2 forward, 4 backward); the embedding is a lookup
     n_matmul = sum(q.data.size for q in params) - model.embed.weight.data.size
     opt = AdamW(params, lr=args.lr, betas=(0.9, 0.95), weight_decay=args.weight_decay)
     scaler = LossScaler() if args.amp == "float16" else None
@@ -107,7 +97,7 @@ def main():
             opt.zero_grad()
             (loss * scaler.scale if scaler else loss).backward()
             overflow = scaler is not None and not scaler.unscale(params)
-            if not overflow:  # an overflowed float16 gradient skips the update, not the step's eval and checkpoint
+            if not overflow:  # an overflowed float16 step skips the update, not the eval and checkpoint
                 grad_norm = clip_grad_norm(params, args.clip)
                 opt.step()
             dt = time.perf_counter() - t0

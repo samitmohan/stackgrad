@@ -1,13 +1,3 @@
-"""The serving core: block accounting, and continuous batching that changes nothing about the output.
-
-    uv run python tests/serve.py [--device metal]
-
-With greedy sampling, requests run concurrently through the Scheduler must produce
-exactly the tokens model.generate produces for each one alone: with room for
-everyone, with a batch cap that makes requests queue, and with a KV budget so small
-that requests get preempted and recomputed. Then the same through the Engine, with
-every request submitted from its own thread at once, as an HTTP server would.
-"""
 import argparse
 import json
 import sys
@@ -84,7 +74,6 @@ def main():
                         "steps": steps, "preemptions": preemptions, "identical": ok})
         if name == "tiny KV budget":
             assert preemptions > 0, "the tiny budget never forced a preemption"
-    # the engine: one thread per caller, all submitting at once
     engine = Engine(Scheduler(StackgradRunner(model), BlockManager(9, block_size=4), max_batch=8), threading.Lock())
     streams, threads = {}, []
     for i, (prompt, m) in enumerate(specs):

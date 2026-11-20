@@ -1,12 +1,3 @@
-"""LoRA: train a low-rank update beside each frozen weight instead of the weight itself.
-
-    y = x W + (alpha / r) * (x A) B        W (in, out) frozen; A (in, r) and B (r, out) trained
-
-B starts at zero, so training starts from exactly the base model. Only A and B,
-r * (in + out) numbers per layer, get gradients and optimizer state. After training,
-merge_adapter folds the update into W, so the fine-tuned model runs at the base
-model's speed and in any dtype.
-"""
 import numpy as np
 
 from .layers import Linear
@@ -17,11 +8,12 @@ TARGETS = ("q_proj", "k_proj", "v_proj", "o_proj", "w1", "w2", "w3")  # every ma
 
 
 class LoRALinear(Module):
+    """A frozen Linear plus a trained low-rank update: y = x W + (alpha / r) (x A) B, B starting at zero."""
     def __init__(self, base, r, alpha):
         super().__init__()
         n_in, n_out = base.weight.shape
         self.base = base
-        # cast after dividing: since NumPy 2, a float32 array divided by np.sqrt's float64 scalar comes out float64
+        # cast after dividing: numpy 2 promotes float32 / np.sqrt's float64 scalar to float64
         init = (np.random.randn(n_in, r) / np.sqrt(n_in)).astype(np.float32)
         self.A = Tensor(init, requires_grad=True, device=base.weight.device)
         self.B = Tensor(np.zeros((r, n_out), np.float32), requires_grad=True, device=base.weight.device)
@@ -34,10 +26,7 @@ class LoRALinear(Module):
 
 
 def apply_lora(model, r=16, alpha=32):
-    """Freeze every weight of a TransformerLM, then wrap each target Linear in a LoRALinear.
-
-    Afterwards model.parameters() is exactly the LoRA weights, ready for an optimizer.
-    """
+    """Freezes a TransformerLM and wraps each target Linear in a LoRALinear, so only A and B train."""
     for _, p in model.named_parameters():
         p.requires_grad = False
     for block in model.blocks:

@@ -1,17 +1,3 @@
-"""What each backend costs per op, and where a GPU backend loses to NumPy.
-
-    uv run python bench/backend_overhead.py                  # cpu + metal, on the Mac
-    uv run --no-dev python bench/backend_overhead.py --devices cuda   # bqa3
-
-1. elementwise: 64 chained multiplies on n floats, timed per op three ways:
-   the raw backend array, the backend with a sync after every op, and through
-   stackgrad Tensors (no_grad), which adds the Python cost of the framework.
-2. matmul: square float32 (and bfloat16 on metal) matmuls, in TFLOP/s.
-3. train step: one CS336 TinyStories step (fwd + bwd + AdamW) per device, and the
-   same model written in plain MLX (mlx.nn, its fused kernels) as the target.
-
-Writes bench/results/backend_overhead_<devices>.json.
-"""
 import argparse
 import json
 import os

@@ -1,13 +1,3 @@
-"""CuPy backend: an NVIDIA GPU through CUDA.
-
-Verified on bqa3 (RTX 3090, CuPy 14.2, CUDA 13): tests/backends.py --device cuda
-passes, and it trained the CS336 TinyStories model (val loss 1.399, runs/tinystories).
-
-CuPy copies the NumPy API, arrays included, so this module is cpu.py with cupy
-in place of numpy. CuPy launches each op as it is called and returns before
-the GPU finishes; `.item()` and `to_numpy` wait for it.
-Set CUPY_TF32=1 to run float32 matmuls on the tensor cores in TF32.
-"""
 import cupy as cp
 import cupyx
 from cupy import (
@@ -68,7 +58,6 @@ __all__ = [
 
 
 def clear_cache():
-    """Give the blocks CuPy's memory pool keeps for reuse back to the GPU."""
     cp.get_default_memory_pool().free_all_blocks()
 
 def asarray(x, dtype=None):
@@ -80,7 +69,7 @@ def to_numpy(x):
 
 
 def fused_attention(q, k, v):
-    """mlops.Attention's forward as Triton kernels; None for shapes they don't cover (the reference math runs)."""
+    """Triton FlashAttention forward, or None for shapes the kernels don't cover."""
     return cuda_attention.attention(q, k, v) if cuda_attention.supported(q) else None
 
 
@@ -98,9 +87,9 @@ def scatter_add(shape, key, values):
     return out
 
 
-# shortcut: im2col runs on the device, but col2im (conv's backward) round-trips through the CPU; write it in CuPy if a CNN trains on cuda
+# shortcut: col2im (conv backward) round-trips through the CPU, port it to CuPy if a CNN trains on cuda
 def im2col(x, *args):
-    return cpu.im2col(x, *args, xp=cp)  # on the device; col2im, used only in training, still goes through the CPU
+    return cpu.im2col(x, *args, xp=cp)
 
 
 def col2im(cols, *args):

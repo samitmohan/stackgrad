@@ -1,15 +1,3 @@
-"""Lazy tensors: writing an op records it, reading a result runs it.
-
-Every primitive's forward is wrapped to count its runs, then:
-- `a @ b` and a whole function returning a result run nothing, yet know their shape and dtype;
-- reading the result runs each op it needs exactly once, and a second read runs nothing;
-- an op nobody reads never runs;
-- replacing an input's .data after an op was written does not change that op's result;
-- comparisons and where() stay lazy too, and backward on a lazy loss gives the eager gradients;
-- a whole TransformerLM forward runs nothing: no layer reads .data to check a shape.
-
-    uv run python tests/lazy.py
-"""
 import inspect
 import sys
 

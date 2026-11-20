@@ -1,27 +1,10 @@
-"""Every gradient in stackgrad, in one file.
-
-Each Function is one primitive op. `forward` computes the result from raw backend
-arrays and saves what the gradient needs. `backward` takes the gradient of the
-output and returns one gradient per input (None for inputs that don't need one).
-
-Everything else in the framework (sub, div, relu, softmax, layernorm, attention,
-conv) is a composition of these, so its gradient comes for free.
-
-`self.xp` is the array backend (see backend/). Python operators work on every
-backend's arrays; anything else goes through `xp`.
-
-Tensors are lazy (tensor.py): an op is recorded when it is written and runs when its
-result is needed. `out_shape` and `out_dtype` tell a recorded result its shape and
-dtype from its inputs' before anything runs; tensor.py checks them against the real
-result when it does run.
-"""
 import math
 
 import numpy as np
 
 
 class Function:
-    differentiable = True  # False: the result never carries a gradient (comparisons)
+    differentiable = True
 
     def __init__(self, xp, *parents):
         self.xp = xp
@@ -35,11 +18,10 @@ class Function:
         raise NotImplementedError
 
     def out_shape(self, *shapes, **kwargs):
-        """The result's shape from the inputs' shapes. Elementwise ops broadcast; the others override this."""
         return np.broadcast_shapes(*shapes)
 
     def out_dtype(self, *dtypes, **kwargs):
-        """The result's dtype: the inputs' promoted, as the backend promotes them (a 0-d probe asks it)."""
+        """Promote the input dtypes as the backend does, by adding 0-d probes."""
         out = dtypes[0]
         for d in dtypes[1:]:
             if d != out:
@@ -48,13 +30,11 @@ class Function:
 
 
 def _reduced(shape, axis, keepdims):
-    """The shape a reduction over `axis` (None: every axis) leaves."""
     axes = range(len(shape)) if axis is None else [a % len(shape) for a in (axis if isinstance(axis, (tuple, list)) else (axis,))]
     return tuple(1 if i in axes else d for i, d in enumerate(shape) if keepdims or i not in axes)
 
 
 def unbroadcast(grad, shape):
-    """Sum `grad` down to `shape`. Broadcasting copies a value, so its backward adds the copies up."""
     while grad.ndim > len(shape):
         grad = grad.sum(axis=0)
     for i, size in enumerate(shape):
@@ -63,15 +43,12 @@ def unbroadcast(grad, shape):
     return grad
 
 
-# unary
-
 class Recip(Function):
     def forward(self, x):
         self.out = 1.0 / x
         return self.out
 
     def backward(self, grad):
-        # d(1/x)/dx = -1/x^2
         return (-grad * self.out * self.out,)
 
 
@@ -94,8 +71,7 @@ class Log(Function):
 
 
 class Sigmoid(Function):
-    # A primitive, not exp/recip composed: through the composition, a very
-    # negative x gives exp(-x) = inf and the backward computes 0 * inf = nan.
+    # a primitive: composed from exp/recip, a very negative x gives 0 * inf = nan in backward
     def forward(self, x):
         self.out = self.xp.sigmoid(x)
         return self.out
@@ -105,7 +81,6 @@ class Sigmoid(Function):
 
 
 class Pow(Function):
-    """x ** c for a constant exponent c."""
     def forward(self, x, c):
         self.x, self.c = x, c
         return x ** c
@@ -126,7 +101,7 @@ class Cast(Function):
         return dtype
 
 
-# binary: inputs that need a gradient arrive already expanded to the output shape
+# binary ops: inputs that need a gradient arrive already expanded to the output shape
 
 class Add(Function):
     def forward(self, x, y):
@@ -147,7 +122,6 @@ class Mul(Function):
 
 
 class Where(Function):
-    """x where `cond` is true, else y. `cond`, the third input, is a mask and gets no gradient."""
     def forward(self, x, y, cond):
         self.cond = cond
         return self.xp.where(cond, x, y)
@@ -161,7 +135,6 @@ class Where(Function):
 
 
 class Less(Function):
-    """x < y as a float32 mask of 0s and 1s, the type comparisons have always returned. It has no gradient."""
     differentiable = False
 
     def forward(self, x, y):
@@ -170,8 +143,6 @@ class Less(Function):
     def out_dtype(self, x, y):
         return self.xp.float32
 
-
-# reduce
 
 class Sum(Function):
     def forward(self, x, axis, keepdims):
@@ -182,7 +153,6 @@ class Sum(Function):
         return _reduced(x, axis, keepdims)
 
     def backward(self, grad):
-        # every input element contributed once, so each one gets the output's grad
         if self.axis is not None and not self.keepdims:
             grad = self.xp.expand_dims(grad, self.axis)
         return (self.xp.broadcast_to(grad, self.shape),)
@@ -198,15 +168,13 @@ class Max(Function):
         return _reduced(x, axis, keepdims)
 
     def backward(self, grad):
-        # only the max element(s) affect the output; ties split the gradient evenly
+        # ties split the gradient evenly
         mask = (self.x == self.out).astype(self.x.dtype)
         mask = mask / mask.sum(axis=self.axis, keepdims=True)
         if self.axis is not None and not self.keepdims:
             grad = self.xp.expand_dims(grad, self.axis)
         return (mask * grad,)
 
-
-# movement
 
 class Reshape(Function):
     def forward(self, x, shape):
@@ -238,7 +206,7 @@ class Permute(Function):
 
 
 class Expand(Function):
-    """Broadcast x to a larger shape (x already has the target rank)."""
+    """x already has the target rank; Tensor.expand adds the leading dims."""
     def forward(self, x, shape):
         self.shape = x.shape
         return self.xp.broadcast_to(x, shape)
@@ -251,27 +219,24 @@ class Expand(Function):
 
 
 class Index(Function):
-    """x[key] for any NumPy-style key: slices, ints, or integer arrays (gather)."""
     def forward(self, x, key):
         self.shape, self.key = x.shape, key
         return x[key]
 
     def backward(self, grad):
-        # scatter the gradient back; an index picked twice gets both gradients
+        # scatter_add: an index picked twice gets both gradients
         return (self.xp.scatter_add(self.shape, self.key, grad),)
 
     def out_shape(self, x, key):
-        """Index a stand-in of shape x whose every element shares one byte. An index array's values do not change the
-        result's shape, so it becomes zeros, except a boolean mask, whose count of True does."""
+        """Index a zero-stride stand-in of shape x; index arrays become zeros, bool masks stay (their count matters)."""
         def stand_in(k):
             if not hasattr(k, "dtype"):
-                return k  # an int, a slice, None, or Ellipsis
+                return k
             if "bool" in str(k.dtype):
                 return self.xp.to_numpy(k)
             return np.zeros(tuple(k.shape), dtype=np.intp)
         key = tuple(map(stand_in, key)) if isinstance(key, tuple) else stand_in(key)
-        # shortcut: an integer-array index (a gather) allocates one byte per result element here; derive the shape from
-        # NumPy's indexing rules instead if a large gather ever shows up in a profile
+        # shortcut: a gather allocates one byte per result element here, compute the shape if it shows in a profile
         return np.lib.stride_tricks.as_strided(np.zeros(1, np.uint8), x, (0,) * len(x))[key].shape
 
 
@@ -299,13 +264,11 @@ class Cat(Function):
 
 
 class Im2col(Function):
-    """Unroll every (kh, kw) patch of an (N, C, H, W) image into one row, so conv becomes a matmul."""
     def forward(self, x, kh, kw, stride, padding):
         self.args = (x.shape, kh, kw, stride, padding)
         return self.xp.im2col(x, kh, kw, stride, padding)
 
     def backward(self, grad):
-        # col2im adds each row back onto the pixels its patch came from
         return (self.xp.col2im(grad, *self.args),)
 
     def out_shape(self, x, kh, kw, stride, padding):
@@ -314,7 +277,7 @@ class Im2col(Function):
         return (n * oh * ow, c * kh * kw)
 
 
-# matmul stays a primitive: decomposing it into broadcast-multiply-sum would throw away BLAS
+# a primitive: as broadcast-multiply-sum it would lose BLAS
 
 class Matmul(Function):
     def forward(self, x, y):
@@ -322,13 +285,11 @@ class Matmul(Function):
         return x @ y
 
     def backward(self, grad):
-        # swapaxes(-1, -2) transposes the matrix dims and keeps batch dims;
-        # unbroadcast sums over batch dims that were broadcast in the forward
         return (unbroadcast(grad @ self.y.swapaxes(-1, -2), self.x.shape) if self.needs_grad[0] else None,
                 unbroadcast(self.x.swapaxes(-1, -2) @ grad, self.y.shape) if self.needs_grad[1] else None)
 
     def out_shape(self, x, y):
-        """NumPy's matmul rule: (..., n, k) @ (..., k, m) -> (broadcast ..., n, m); a 1-d operand loses its matrix dim."""
+        """NumPy's matmul shape rule, 1-d operands included."""
         x1, y1 = len(x) == 1, len(y) == 1
         x, y = (1,) + x if x1 else x, y + (1,) if y1 else y
         assert x[-1] == y[-2], f"cannot multiply {x} by {y}"
@@ -338,27 +299,20 @@ class Matmul(Function):
 
 
 class Attention(Function):
-    """Causal softmax(q k^T / sqrt(D)) v. q is (B, H, T, D); k and v are (B, Hkv, S, D), each kv head serving H/Hkv query heads.
-
-    A primitive, though it could be composed, so a backend can run it as one fused
-    kernel that never writes the (T, S) score matrix to memory (metal_attention.py).
-    After a fused forward, the backward rebuilds the probabilities from q, k and the
-    saved log-sum-exp; the reference forward already has them, so it keeps them.
-    """
+    """Causal GQA attention, a primitive so a backend can fuse it; backward rebuilds p from the saved lse."""
     def scores(self, q, k):
         xp = self.xp
         T, S = q.shape[2], k.shape[2]
         k = xp.repeat(k, q.shape[1] // k.shape[1], axis=1)
         s = q @ k.swapaxes(-1, -2) * q.shape[-1] ** -0.5
-        if self.causal:  # query i sits at absolute position S - T + i and may see keys 0 .. S - T + i
+        if self.causal:  # query i sits at position S - T + i (kv cache)
             s = s + xp.triu(xp.full((T, S), -xp.inf, dtype=q.dtype), k=S - T + 1)
         if self.key_bias is not None:
             s = s + xp.asarray(self.key_bias, dtype=q.dtype)[:, None, None, :]
         return s
 
     def forward(self, q, k, v, key_bias=None, causal=True):
-        """key_bias: None, or a (B, S) array added to every query's score for each key (a mask, for left padding).
-        causal=False lets every query see every key, as image and cross-attention do."""
+        """key_bias: optional (B, S) array added to each key's score (left-padding mask)."""
         self.key_bias, self.causal = key_bias, causal
         fused = getattr(self.xp, "fused_attention", None) if key_bias is None and causal else None  # the kernels take no mask
         out = fused(q, k, v) if fused else None
@@ -377,7 +331,7 @@ class Attention(Function):
         q, k, v, out, lse = self.saved
         xp = self.xp
         fused = getattr(xp, "fused_attention_backward", None)
-        if fused is not None and self.p is None:  # the forward ran fused (CUDA): the kernels' backward
+        if fused is not None and self.p is None:  # p is None only after a fused forward
             return fused(q, k, v, out, lse, grad)
         B, Hkv, S, D = k.shape
         rep = q.shape[1] // Hkv
@@ -388,7 +342,7 @@ class Attention(Function):
         ds = p * (dp - (grad * out).sum(axis=-1, keepdims=True)) * D ** -0.5
         dq = ds @ xp.repeat(k, rep, axis=1)
         dk = ds.swapaxes(-1, -2) @ q
-        # each kv head served `rep` query heads, so it collects all their gradients
+        # each kv head sums the grads of the `rep` query heads it served
         return dq, dk.reshape(B, Hkv, rep, S, D).sum(axis=2), dv.reshape(B, Hkv, rep, S, D).sum(axis=2)
 
     def out_shape(self, q, k, v, key_bias=None, causal=True):

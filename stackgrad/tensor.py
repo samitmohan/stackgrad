@@ -1,16 +1,3 @@
-"""Tensor: an array plus a record of the op that produced it.
-
-Every op goes through `_apply`, which records one primitive from mlops.py without
-running it: `a @ b` returns a lazy tensor that knows its shape and dtype and holds
-no numbers. The numbers are computed when something reads them: `.data`,
-`.numpy()`, `.item()`, printing, `.backward()`, or `.realize()`. Realizing runs
-every recorded op the tensor depends on, once each; an op nobody reads never runs.
-
-When gradients are on, the record also goes in `out._ctx`, and `.backward()` walks
-those records in reverse topological order, calling each primitive's backward.
-Everything else in this file composes primitives, so it never defines a gradient
-of its own.
-"""
 import math
 import threading
 
@@ -18,15 +5,13 @@ import numpy as np
 
 from . import backend, mlops
 
-# global flag for no_grad context
-_local = threading.local()  # per thread: the serving engine's no_grad() must not freeze tensors other threads build
+_local = threading.local()  # thread-local: the serving engine's no_grad() must not freeze other threads' graphs
 
 
 def grad_enabled():
-    """Whether operations in this thread record a graph for backward (False inside no_grad)."""
     return getattr(_local, "grad_enabled", True)
-_profiler = None  # a stackgrad.profile.profile while one is active
-_autocast = None  # a dtype name while autocast is active
+_profiler = None
+_autocast = None
 
 
 class no_grad:
@@ -41,9 +26,7 @@ class no_grad:
 
 
 class autocast:
-    """Mixed precision. Inside, every Linear multiplies in `dtype` ("bfloat16" or "float16") and hands back
-    float32, while the weights and all other ops stay float32. The casts are differentiable, so the
-    gradients land on the float32 weights. float16's narrow range needs the loss scaled (train_gpt.py --amp)."""
+    """Mixed precision: every Linear multiplies in `dtype` ("bfloat16" or "float16"), all else stays float32."""
     def __init__(self, dtype):
         self.dtype = dtype
 
@@ -58,7 +41,6 @@ class autocast:
 
 
 def _to_array(data, device):
-    """Data as a float array on `device`. Float arrays keep their dtype; ints, bools, and Python numbers become float32."""
     xp = backend.get(device)
     if not hasattr(data, "dtype"):
         data = np.asarray(data, dtype=np.float32)
@@ -67,16 +49,11 @@ def _to_array(data, device):
 
 
 def _shape(args):
-    # reshape(2, 3) and reshape((2, 3)) both work
     return tuple(args[0]) if len(args) == 1 and isinstance(args[0], (tuple, list)) else tuple(args)
 
 
 def _apply(fn, *parents, **kwargs):
-    """Record primitive `fn` on `parents` without running it, and for backward too if any parent needs a gradient.
-
-    Each input is taken as it is now: an input that already holds numbers is kept as that array, so replacing its
-    `.data` later (an optimizer step) cannot change this result; an input still lazy is computed first when this one is.
-    """
+    """Records `fn` without running it; a realized parent is held by its array, so a later .data swap can't alter it."""
     device = parents[0].device
     assert all(p.device == device for p in parents), f"tensors on different devices: {[p.device for p in parents]}"
     xp = backend.get(device)
@@ -84,7 +61,7 @@ def _apply(fn, *parents, **kwargs):
     dtype = ctx.out_dtype(*[p.dtype for p in parents], **kwargs)
     out = Tensor._recorded((ctx, kwargs, [p if p._buf is None else p._buf for p in parents]),
                            tuple(ctx.out_shape(*[tuple(p.shape) for p in parents], **kwargs)),
-                           dtype if xp.is_float(dtype) else xp.float32, device)  # as Tensor() turns ints and bools to float32
+                           dtype if xp.is_float(dtype) else xp.float32, device)  # Tensor() makes ints and bools float32
     if grad_enabled() and fn.differentiable and any(ctx.needs_grad):
         out.requires_grad = True
         out._ctx = ctx
@@ -92,32 +69,16 @@ def _apply(fn, *parents, **kwargs):
 
 
 def _broadcast(tensors, shape=()):
-    """Expand every tensor that needs a gradient to the common broadcast shape.
-
-    Constants stay as they are: the backend broadcasts them for free, and
-    nothing needs their gradient. Expand's backward is what sums gradients
-    back down to the smaller shape.
-    """
+    """Expands only tensors that need a gradient, since Expand's backward sums it back; constants broadcast free."""
     shape = np.broadcast_shapes(shape, *(t.shape for t in tensors))
     return [t.expand(shape) if grad_enabled() and t.requires_grad and t.shape != shape else t
             for t in tensors]
 
 
 class Tensor:
-    __array_ufunc__ = None  # np.float32(2) * t calls t.__rmul__ instead of making an object array that drops the graph
-    """An n-dimensional array that records operations for reverse-mode autodiff.
+    """An n-dimensional array on a device ("cpu", "metal", "cuda") that records its ops for reverse-mode autodiff."""
+    __array_ufunc__ = None  # makes np.float32(2) * t call t.__rmul__, not build an object array that drops the graph
 
-    Wraps an array of the backend named by `device` ("cpu", "metal", "cuda"). When `requires_grad=True`, every operation builds a node
-    in the computation graph; calling `.backward()` on a scalar walks that graph
-    in reverse and fills in `.grad` on the leaves.
-
-    ```python
-    x = Tensor([1.0, 2.0, 3.0], requires_grad=True)
-    y = (x ** 2).sum()
-    y.backward()
-    x.grad  # array([2., 4., 6.])
-    ```
-    """
     def __init__(self, data, *, requires_grad=False, device="cpu"):
         self.data = _to_array(data, device)
         self.device = device
@@ -127,17 +88,15 @@ class Tensor:
 
     @classmethod
     def _recorded(cls, lazy, shape, dtype, device):
-        """A tensor an op has recorded but not run: `lazy` is (op, its keyword arguments, its inputs)."""
+        """`lazy` is (ctx, kwargs, inputs)."""
         out = cls.__new__(cls)
         out._buf, out._lazy, out._shape, out._dtype = None, lazy, shape, dtype
         out.device, out.requires_grad, out.grad, out._ctx = device, False, None, None
         return out
 
-    # the numbers, computed on first read
-
     @property
     def data(self):
-        """The backend array. Reading it runs the ops this tensor still owes (see realize)."""
+        """The backend array; reading it realizes the tensor."""
         if self._buf is None:
             self.realize()
         return self._buf
@@ -147,12 +106,9 @@ class Tensor:
         self._buf, self._lazy = array, None
 
     def realize(self):
-        """Compute this tensor: run every recorded op it depends on, inputs first, once each. Returns self.
-
-        On Metal this hands the work to MLX, which is lazy too: its arrays are computed when read or at `mx.eval`.
-        """
+        """Computes this tensor by running every recorded op it depends on, once each. Returns self."""
         order, seen, stack = [], set(), [(self, False)]
-        while stack:  # iterative post-order, so a deep graph cannot hit the recursion limit
+        while stack:  # iterative, so a deep graph cannot hit the recursion limit
             node, inputs_done = stack.pop()
             if inputs_done:
                 order.append(node)
@@ -168,14 +124,12 @@ class Tensor:
             else:
                 out = _profiler.time(type(ctx).__name__, node.device, ctx.forward, *args, **kwargs)
             if out.dtype != node._dtype:
-                out = _to_array(out, node.device)  # ints and bools become float32, as Tensor() has always made them
-            # the shape and dtype every later op was built on must be the ones that came out
+                out = _to_array(out, node.device)  # ints and bools become float32, as in Tensor()
+            # later ops were built on the recorded shape and dtype
             assert tuple(out.shape) == node._shape and out.dtype == node._dtype, \
                 f"{type(ctx).__name__} recorded {node._shape} {node._dtype} but computed {tuple(out.shape)} {out.dtype}"
-            node.data = out  # drops the record, so inputs nothing else holds can be freed
+            node.data = out  # drops _lazy, so inputs nothing else holds can be freed
         return self
-
-    # properties
 
     @property
     def shape(self):
@@ -193,7 +147,7 @@ class Tensor:
     def T(self):
         return self.transpose()
 
-    # graph bookkeeping, read by the graph explorer (serve/api.py)
+    # read by the graph explorer (serve/api.py)
 
     @property
     def _op(self):
@@ -201,8 +155,6 @@ class Tensor:
 
     def _const(self, x):
         return x if isinstance(x, Tensor) else Tensor(backend.get(self.device).asarray(x, dtype=self.dtype), device=self.device)
-
-    # arithmetic: sub, div, and neg are compositions of add, mul, and recip
 
     def __add__(self, other):
         return _apply(mlops.Add, *_broadcast([self, self._const(other)]))
@@ -233,14 +185,12 @@ class Tensor:
 
     def __pow__(self, exponent):
         if isinstance(exponent, Tensor):
-            # a^b = e^(b ln a), so this needs a positive base
+            # a**b = exp(b * ln a), so the base must be positive
             return (exponent * self.log()).exp()
         return _apply(mlops.Pow, self, c=exponent)
 
     def __matmul__(self, other):
         return _apply(mlops.Matmul, self, other)
-
-    # comparisons return constant 0/1 masks with no gradient
 
     def __lt__(self, other):
         return _apply(mlops.Less, self, self._const(other))
@@ -248,16 +198,14 @@ class Tensor:
     def __gt__(self, other):
         return _apply(mlops.Less, self._const(other), self)
 
-    # reductions
-
     def sum(self, axis=None, keepdims=False):
-        """Sum over `axis` (or all elements). Differentiable."""
+        """Sum over `axis`, or over every element when `axis` is None."""
         return _apply(mlops.Sum, self, axis=axis, keepdims=keepdims)
 
     def mean(self, axis=None, keepdims=False):
-        """Mean over `axis` (or all elements). Differentiable."""
+        """Mean over `axis`, or over every element when `axis` is None."""
         out = self.sum(axis=axis, keepdims=keepdims)
-        # out.size / self.size is 1 / (number of elements summed into each output); from shapes, so nothing runs yet
+        # from shapes, not .data, so the graph stays lazy
         return out * (math.prod(out.shape) / math.prod(self.shape))
 
     def max(self, axis=None, keepdims=False):
@@ -266,17 +214,15 @@ class Tensor:
     def min(self, axis=None, keepdims=False):
         return -((-self).max(axis=axis, keepdims=keepdims))
 
-    # shape ops
-
     def reshape(self, *shape):
-        """Return a view with a new shape. Differentiable."""
+        """Same data in a new shape; one dim may be -1."""
         return _apply(mlops.Reshape, self, shape=_shape(shape))
 
     def permute(self, *order):
         return _apply(mlops.Permute, self, order=tuple(d % self.ndim for d in _shape(order)))
 
     def transpose(self, dim0=-2, dim1=-1):
-        """Swap two axes (last two by default). Differentiable."""
+        """Swap two axes, the last two by default."""
         order = list(range(self.ndim))
         order[dim0], order[dim1] = order[dim1], order[dim0]
         return self.permute(order)
@@ -296,7 +242,7 @@ class Tensor:
         return self.reshape(self.shape[:axis] + (1,) + self.shape[axis:])
 
     def __getitem__(self, key):
-        # index arrays usually come from NumPy; they must live where the data lives
+        # numpy index arrays must move to the tensor's device
         xp = backend.get(self.device)
 
         def on_device(k):
@@ -309,13 +255,11 @@ class Tensor:
         return _apply(mlops.Im2col, self, kh=kh, kw=kw, stride=stride, padding=padding)
 
     def cast(self, dtype):
-        """Convert to `dtype` ("float32", "bfloat16", ...). Differentiable: the gradient comes back in the old dtype."""
+        """Convert to `dtype` ("float32", "bfloat16", ...); the gradient comes back in the old dtype."""
         return _apply(mlops.Cast, self, dtype=backend.get(self.device).dtype(dtype))
 
-    # elementwise ops
-
     def exp(self):
-        """Elementwise `e ** x`. Differentiable."""
+        """Elementwise `e ** x`."""
         return _apply(mlops.Exp, self)
 
     def log(self):
@@ -331,7 +275,6 @@ class Tensor:
         return where(self > 0, self, 0.0)
 
     def tanh(self):
-        # tanh(x) = 2 * sigmoid(2x) - 1
         return 2.0 * (2.0 * self).sigmoid() - 1.0
 
     def abs(self):
@@ -345,17 +288,11 @@ class Tensor:
             out = where(out > max_val, max_val, out)
         return out
 
-    # autograd
-
     def backward(self, keep_grads=False):
-        """Run reverse-mode autodiff from this scalar, filling `.grad` on every leaf.
-
-        keep_grads=True also leaves `.grad` on intermediate tensors (for inspecting
-        the graph); call it once per graph, since a second pass would add to them.
-        """
+        """Backpropagate from this scalar, filling `.grad` on every leaf (and intermediates if `keep_grads`)."""
         assert self.data.size == 1, "backward() only works on scalar tensors - call .sum() or .mean() first"
 
-        # iterative post-order DFS so deep graphs don't blow the recursion limit
+        # iterative, so a deep graph cannot hit the recursion limit
         topo = []
         visited = set()
         stack = [(self, False)]
@@ -381,13 +318,12 @@ class Tensor:
                 grads = node._ctx.backward(node.grad)
             else:
                 grads = _profiler.time(type(node._ctx).__name__ + " backward", node.device, node._ctx.backward, node.grad)
-            # An intermediate grad is only needed until it reaches the parents.
-            # Freeing it also means a second backward() starts clean.
+            # free intermediate grads once passed on, so a second backward() starts clean
             if not keep_grads:
                 node.grad = None
             for parent, grad in zip(node._ctx.parents, grads):
                 if grad is not None and parent.requires_grad:
-                    # never += : one grad array can be shared by two parents (see Add)
+                    # never +=: Add hands one grad array to both parents
                     parent.grad = grad if parent.grad is None else parent.grad + grad
 
     def zero_grad(self):
@@ -399,10 +335,7 @@ class Tensor:
 
 
     def to(self, device=None, dtype=None):
-        """This tensor outside the graph, on `device` and in `dtype` ("bfloat16", ...); None keeps the current one.
-
-        Moving or casting copies the data; with neither, the new tensor shares it.
-        """
+        """This tensor outside the graph, on `device` in `dtype` ("bfloat16", ...); None keeps the current one."""
         device = device or self.device
         data = self.data if device == self.device else backend.get(device).asarray(self.numpy())
         if dtype is not None:
@@ -426,8 +359,6 @@ class Tensor:
         return float(self.data.item())
 
 
-# free functions
-
 def where(cond, x, y):
     """Elementwise `x if cond else y`. `cond` is a mask and gets no gradient."""
     ref = x if isinstance(x, Tensor) else y
@@ -437,10 +368,10 @@ def where(cond, x, y):
 
 
 def cat(tensors, axis=0):
-    """Concatenate tensors along an existing axis. Differentiable."""
+    """Concatenate tensors along an existing axis."""
     return _apply(mlops.Cat, *tensors, axis=axis)
 
 
 def stack(tensors, axis=0):
-    """Stack tensors along a new axis. Differentiable."""
+    """Stack tensors along a new axis."""
     return cat([t.unsqueeze(axis) for t in tensors], axis=axis)

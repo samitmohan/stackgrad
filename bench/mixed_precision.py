@@ -1,12 +1,3 @@
-"""Mixed-precision training against float32 (CS336 A2): the story model, same weights, same batches.
-
-    uv run python bench/mixed_precision.py --device metal                          # bfloat16 multiplies
-    CUPY_TF32=1 uv run --no-dev python bench/mixed_precision.py --device cuda      # float16, loss scaled
-
-Each precision trains the CS336 configuration for --steps steps from one starting point on one
-sequence of batches. Reports the median step time and both loss curves. Writes
-bench/results/mixed_precision_<device>.json.
-"""
 import argparse
 import json
 import sys

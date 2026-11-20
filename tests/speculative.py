@@ -1,7 +1,3 @@
-"""Speculative decoding (stackgrad/speculative.py): greedy output equals the target's, and samples follow its distribution.
-
-    uv run python tests/speculative.py
-"""
 import sys
 from itertools import product
 from pathlib import Path
@@ -32,7 +28,7 @@ def main():
         assert got == alone, (k, got, alone)
     print("[ok]   greedy: 20 tokens equal the target's own greedy output for k = 1, 2, 3, 4")
 
-    # sampling: the first two tokens must follow the target's joint distribution, which a 6-token vocabulary makes exact
+    # sampling: the first two tokens must follow the target's joint distribution, exact with a 6-token vocabulary
     target, draft = model(6, 2, 32), model(6, 3, 16)
     prompt = [1, 4, 2]
     with no_grad():

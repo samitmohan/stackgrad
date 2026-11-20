@@ -1,12 +1,3 @@
-"""LoRA fine-tune of Qwen3-0.6B on GSM8K's training split (SPEC.md M3).
-
-    CUPY_TF32=1 uv run --no-dev python train_lora.py --run lora_gsm8k --device cuda    # bqa3
-    uv run --no-dev python train_lora.py --run lora_smoke --device cuda --steps 4       # a quick check
-
-Each example is the evaluation prompt (bench/gsm8k.py) followed by GSM8K's reference
-solution, its <<calculator>> annotations removed, ending "#### <answer>". The loss covers
-only the reply. Writes runs/<run>/config.json, metrics.jsonl, and adapter.npz.
-"""
 import argparse
 import json
 import re
@@ -22,7 +13,6 @@ from stackgrad.qwen3 import chat_prompt, load_qwen3, load_tokenizer
 
 
 def examples(tok, path):
-    """(token ids, number of prompt tokens) for every question in a GSM8K .jsonl file."""
     out = []
     with open(path) as f:
         for line in f:
@@ -34,7 +24,6 @@ def examples(tok, path):
 
 
 def make_batch(rows, pad):
-    """Right-padded inputs and targets, and a mask that is True where the target is a reply token."""
     T = max(len(ids) for ids, _ in rows)
     x = np.full((len(rows), T), pad, dtype=np.int64)
     mask = np.zeros((len(rows), T - 1), dtype=bool)
@@ -45,10 +34,9 @@ def make_batch(rows, pad):
 
 
 def reply_logits(model, inputs, mask):
-    """Logits at the reply positions only, and those positions' flat indices into inputs."""
     h = model.hidden(inputs)
     rows = np.flatnonzero(mask.reshape(-1))
-    # the 151,936-way head only where the loss looks: on every position it would be B * T * 151,936 floats
+    # the 151,936-way head only where the loss looks, not on all B * T positions
     return model.project(h.reshape(-1, h.shape[-1])[rows]), rows
 
 
@@ -66,8 +54,7 @@ def main():
     p.add_argument("--rank", type=int, default=16)
     p.add_argument("--alpha", type=float, default=32)
     p.add_argument("--batch", type=int, default=8)
-    # the defaults are runs/lora_gsm8k's. On the 3090 (bench/results/checkpointing_cuda.json) they peak at 10.0 GB and take
-    # 0.79 s per batch of 8. --micro 4 takes 0.40 s at 15.2 GB; --checkpoint --micro 8 takes 0.42 s at 5.2 GB
+    # 3090, batch of 8: micro 2 0.79 s 10.0 GB; micro 4 0.40 s 15.2 GB; --checkpoint micro 8 0.42 s 5.2 GB
     p.add_argument("--micro", type=int, default=2, help="examples per forward pass; their gradients add up to the batch's")
     p.add_argument("--checkpoint", action="store_true", help="recompute each block in backward instead of storing its activations")
     p.add_argument("--epochs", type=int, default=1)
@@ -113,7 +100,7 @@ def main():
                 loss = reply_loss(model, inputs, targets, mask) * (mask.sum() / reply_tokens)
                 loss.backward()
                 batch_loss, tokens = batch_loss + loss.item(), tokens + inputs.size
-                del loss  # drop this graph's saved activations before the next forward builds its own
+                del loss  # free this graph's saved activations before the next forward
             grad_norm = clip_grad_norm(params, args.clip)
             opt.step()
             dt = time.perf_counter() - t0

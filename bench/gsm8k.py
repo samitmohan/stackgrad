@@ -1,16 +1,3 @@
-"""GSM8K accuracy of Qwen3-0.6B running in stackgrad: before and after LoRA (SPEC.md M3).
-
-    uv run python bench/gsm8k.py                                   # the base model
-    uv run python bench/gsm8k.py --adapter runs/lora_gsm8k/adapter.npz
-
-The protocol is fixed so that the two numbers compare: the first --n questions of the
-test split, the same prompt, greedy decoding, thinking off, at most 320 new tokens.
-A reply scores if its final answer equals the reference: the number after the first "####", else
-the one in the first \\boxed{} (the base model's habit), else the reply's last number. The first, because
-a reply that never stops repeats its answer until the 320-token limit cuts it off, often inside a box:
-"\\boxed{70000} ... \\boxed{7". Taking the last box instead flips 25 of runs/grpo_no_stop's 250 verdicts.
-Writes bench/results/gsm8k_<name>.json, and every reply alongside it.
-"""
 import argparse
 import json
 import re
@@ -30,19 +17,17 @@ NUMBER = r"-?\$?\d[\d,]*(?:\.\d+)?"
 
 
 def final_number(text):
-    """The number after "####", else inside \\boxed{}, else the last number in the text, as a float (None if none)."""
     m = re.search(rf"####\s*({NUMBER})", text) or re.search(rf"\\boxed\{{\s*({NUMBER})", text)
     found = [m.group(1)] if m else re.findall(NUMBER, text)
     return float(found[-1].replace(",", "").replace("$", "")) if found else None  # NUMBER only matches what float() parses
 
 
 def gold_number(answer):
-    """The reference answer of a GSM8K solution: the number after its "####"."""
     return float(answer.split("####")[-1].strip().replace(",", ""))
 
 
 def matches(got, gold):
-    """Whether a reply's final number (final_number's result) is the reference. The GRPO reward and the agent use it too."""
+    """The GRPO reward and the agent use this too."""
     return got is not None and abs(got - gold) < 1e-6
 
 

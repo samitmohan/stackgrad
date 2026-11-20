@@ -1,11 +1,4 @@
 #!/usr/bin/env python3
-"""Parity check: every stackgrad op and layer against its PyTorch twin, outputs and grads, fp32.
-
-    uv run python tests/parity.py
-
-Each check runs the same inputs and weights through both, backprops the same
-random upstream gradient, and compares. Exits nonzero if anything differs.
-"""
 import itertools
 
 import numpy as np
@@ -33,7 +26,6 @@ def close(name, a, b, atol=ATOL, rtol=RTOL):
 
 
 def compare(mt_fn, th_fn, *arrays, params=(), atol=ATOL, rtol=RTOL):
-    """Run both, backprop the same random upstream grad, compare output, input grads, and (mt, torch) param grads."""
     xs = [mt.Tensor(a, requires_grad=True) for a in arrays]
     ts = [torch.tensor(a, requires_grad=True) for a in arrays]
     out, tout = mt_fn(*xs), th_fn(*ts)
@@ -52,11 +44,8 @@ def r(*shape):
 
 
 def twin(p):
-    """A torch leaf holding a copy of stackgrad param p."""
     return torch.tensor(p.data.copy(), requires_grad=True)
 
-
-# ops
 
 @check("add/sub/mul/div broadcast")
 def _():
@@ -102,8 +91,6 @@ def _():
             lambda a: torch.cat([a.permute(2, 0, 1).reshape(6, 4)[idx], a.transpose(0, 1)[:, ::2].reshape(3, 4)]),
             r(2, 3, 4))
 
-
-# layers
 
 @check("Linear")
 def _():
@@ -169,7 +156,6 @@ def _():
 
 
 def torch_attention(m, x, n_heads, n_kv_heads, theta=10000.0):
-    """The same attention written with torch's own SDPA and HF-style rotate_half RoPE."""
     B, T, _ = x.shape
     D = m.head_dim
     wq, wk, wv, wo = (twin(p) for p in (m.q_proj.weight, m.k_proj.weight, m.v_proj.weight, m.o_proj.weight))
@@ -199,7 +185,7 @@ def _():
 
     x = r(2, 7, 16)
     compare(m, th, x)
-    # weight grads: rerun to pair them up (compare() above checked input grads and output)
+    # weight grads: rerun to pair them up; compare() above checked output and input grads
     xs, xt = mt.Tensor(x), torch.tensor(x)
     for p in m.parameters():
         p.zero_grad()
@@ -226,8 +212,6 @@ def _():
         steps = [lm(idx[:, :5], caches).data] + [lm(idx[:, t:t + 1], caches).data for t in range(5, 9)]
     close("cached logits", np.concatenate(steps, axis=1), full)
 
-
-# losses and optimizers
 
 @check("cross_entropy (B, T, V) logits")
 def _():

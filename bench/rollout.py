@@ -1,12 +1,3 @@
-"""How fast GRPO's rollouts sample: Qwen3-0.6B decoding 1, 8, and 64 rows at once (SPEC.md A5).
-
-    CUPY_TF32=1 uv run --no-dev python bench/rollout.py --device cuda    # bqa3
-
-For each batch size: the prefill of left-padded GSM8K prompts, then the time per decode
-step and the reply tokens per second. At 64 rows, one decode step split into the model,
-copying the logits to the host, and drawing the tokens on the host or on the device.
-Writes bench/results/rollout_<device>.json.
-"""
 import argparse
 import json
 import sys
@@ -39,7 +30,6 @@ def main():
     prompts = [tok.encode(chat_prompt([{"role": "user", "content": PROMPT.format(question=q)}])) for q, _ in questions[:64]]
 
     def timed(fn, *fn_args, **fn_kwargs):
-        """fn's result and its wall time, waiting for the GPU's queued work: kernels launch asynchronously."""
         start = time.perf_counter()
         out = fn(*fn_args, **fn_kwargs)
         if args.device == "cuda":

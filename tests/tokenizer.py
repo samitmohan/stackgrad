@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-"""Tokenizer checks: GPT-2 parity with tiktoken, round trips, and the trainer against a naive reference.
-
-    uv run python tests/tokenizer.py
-"""
 import itertools
 import os
 import tempfile
@@ -26,7 +22,6 @@ TEXT = "Once upon a time, a little dog named Max found a red ball. He liked it! 
 
 
 def naive_train(text, vocab_size):
-    """Recount every pair on every merge: slow, obviously correct."""
     words = Counter(m.group() for m in PAT.finditer(text))
     words = {tuple(bytes([b]) for b in w.encode()): c for w, c in words.items()}
     merges = []
@@ -107,8 +102,7 @@ def check_qwen_parity():
     for think in [False, True]:
         want = hf.apply_chat_template(chat, tokenize=False, add_generation_prompt=True, enable_thinking=think)
         assert chat_prompt(chat, think) == want, f"chat template differs (think={think})"
-    # a tool conversation: the tool schema in the system turn, the model's <tool_call> sent back as written,
-    # and two results, which share one user turn
+    # a tool conversation: schema in the system turn, the model's <tool_call> sent back as written, two results in one user turn
     tools = [{"type": "function", "function": {"name": "calculator", "description": "Evaluate arithmetic, e.g. 3 * (4 + 5)",
                                                "parameters": {"type": "object", "properties": {"expression": {"type": "string"}},
                                                               "required": ["expression"]}}}]

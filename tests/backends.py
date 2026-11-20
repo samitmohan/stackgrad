@@ -1,24 +1,3 @@
-"""A GPU backend against the NumPy reference.
-
-    uv run python tests/backends.py --device metal
-    uv run --no-dev python tests/backends.py --device cuda      # bqa3
-
-1. Every check in test_grads.py runs twice, on cpu and on the device, from the
-   same inputs; loss and every gradient must agree.
-2. A TransformerLM trains for a few steps on both backends from identical
-   weights and batches; the loss curves must agree.
-3. The same model decodes token by token against a KV cache on both backends;
-   the logits of every step must agree.
-4. (metal) The model runs in bfloat16: every value in the graph stays bfloat16,
-   and the logits stay close to float32.
-5. (metal) Every attention kernel version against the float64 reference at the
-   shapes the model checks never reach: head sizes 64 and 128, ragged T, T < S.
-6. A 784-128-10 MLP trains on MNIST on both backends; the loss curves must
-   agree within 1e-4. Skipped when scikit-learn is missing or MNIST cannot download.
-
-The cpu side of part 1 runs in float64 (test_grads makes float64 inputs), so it
-measures each backend's float32 error against near-exact values.
-"""
 import argparse
 import gzip
 import json
@@ -48,7 +27,7 @@ from stackgrad import (
 )
 
 RTOL = ATOL = 1e-4
-RESULTS = {}  # what each check measured, written to bench/results/backends_<device>.json for the UI
+RESULTS = {}
 
 
 
@@ -62,7 +41,6 @@ def build_mlp():
     return Sequential(Linear(784, 128), ReLU(), Linear(128, 10))
 
 def move(f, device):
-    """Move every tensor and module the closure `f` reads onto `device`, in place."""
     for cell in f.__closure__ or ():
         v = cell.cell_contents
         if isinstance(v, Module):
@@ -119,7 +97,7 @@ def check_training(device, steps=20):
     models[device].to(device)
     assert not isinstance(models[device].head.weight.data, np.ndarray)
     opts = {d: AdamW(m.parameters(), lr=3e-3, betas=(0.9, 0.95), weight_decay=0.1) for d, m in models.items()}
-    # a learnable rule (next token = this token + 1), so the curves being compared actually fall
+    # a learnable rule (next token = this token + 1), so the compared curves fall
     batches = [(x, (x + 1) % 512) for x in (np.random.randint(0, 512, (8, 64)) for _ in range(steps))]
 
     losses = {}
@@ -202,7 +180,7 @@ def check_kernels():
                                (1, 2, 1, 5, 70, 64), (1, 16, 8, 100, 300, 128)]:
         rng = np.random.default_rng(0)
         q, k, v = (rng.standard_normal(s) for s in [(B, H, T, D), (B, Hkv, S, D), (B, Hkv, S, D)])
-        # the reference: mlops.Attention's own math on cpu in float64 (requires_grad so it keeps its log-sum-exp)
+        # reference: mlops.Attention's own math on cpu in float64; requires_grad keeps its log-sum-exp
         ref = scaled_dot_product_attention(*(Tensor(a, requires_grad=True) for a in (q, k, v)))
         ref_out, ref_lse = ref.data, ref._ctx.saved[4]
         for version in ["v1", "v2", "v3"]:
@@ -216,7 +194,6 @@ def check_kernels():
 
 
 def check_triton_kernels():
-    """The Triton FlashAttention-2 forward and backward against mlops.Attention's own math in float64."""
     import cupy as cp
 
     from stackgrad.attention import scaled_dot_product_attention
@@ -261,7 +238,6 @@ def check_thread(device):
 
 
 def mnist(n):
-    """MNIST's first n training images (n, 784) and labels, downloaded once into data/mnist/."""
     arrays = []
     for name, header in [("train-images-idx3-ubyte.gz", 16), ("train-labels-idx1-ubyte.gz", 8)]:
         path = Path(__file__).resolve().parent.parent / "data" / "mnist" / name

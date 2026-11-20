@@ -1,15 +1,10 @@
-"""Turn next-token logits into token ids."""
 import numpy as np
 
 from . import backend
 
 
 def sample(logits, temperature=1.0, top_k=None, top_p=None):
-    """Pick one token id per row of `logits` (B, V). temperature=0 is greedy.
-
-    top_k keeps the k likeliest tokens. top_p keeps the smallest set of likeliest
-    tokens whose probability adds up to at least p.
-    """
+    """One token id per row of logits (B, V); temperature=0 is greedy, top_k and top_p filter first."""
     if temperature == 0:
         return logits.argmax(axis=-1)
     logits = logits / temperature
@@ -21,8 +16,7 @@ def sample(logits, temperature=1.0, top_k=None, top_p=None):
     if top_p is not None:
         kept = np.zeros_like(probs)
         for row, out in zip(probs, kept):
-            # tokens below (1 - top_p) / V hold less than 1 - top_p together, so the ones above it already pass
-            # top_p and the nucleus never reaches below: sort those few, not all 151,936 of Qwen3's vocabulary
+            # tokens under (1 - top_p) / V sum to under 1 - top_p, so the nucleus lies above: sort only those
             cand = np.flatnonzero(row >= (1 - top_p) / len(row))
             cand = cand[np.argsort(-row[cand])]
             # drop a token once the likelier tokens before it already reach top_p
@@ -33,18 +27,7 @@ def sample(logits, temperature=1.0, top_k=None, top_p=None):
 
 
 def sample_on_device(logits, temperature=1.0):
-    """sample() without top-k or top-p, for a Tensor of logits (B, V), run where the logits live.
-
-    Only B ids reach the host instead of B * V floats. At 64 rows of Qwen3's 151,936-entry
-    vocabulary on the 3090, the host path costs 99 ms per decode step, more than the model.
-    Inverse-CDF sampling: the first token whose running total of probability reaches a
-    uniform draw scaled to the total, so the probabilities never need dividing by their sum.
-    "First" matters. A GPU computes the running total in parallel, in float32, and it is not
-    monotone: on the 3090 it decreased in 1,344 places across 64 rows of Qwen3's logits.
-    Counting the positions below the draw also counts the dips after the crossing. Over one
-    GRPO rollout (20,480 draws) counting disagreed with an exact float64 sampler 28 times, 25
-    of them on tokens below 1e-6, enough to derail replies; the first crossing disagreed twice.
-    """
+    """sample() without top-k or top-p, run where the Tensor of logits lives, so only B ids reach the host."""
     xp = backend.get(logits.device)
     z = logits.data.astype(xp.float32)
     if temperature == 0:
@@ -52,5 +35,5 @@ def sample_on_device(logits, temperature=1.0):
     z = z / temperature
     cdf = xp.cumsum(xp.exp(z - z.max(axis=-1, keepdims=True)), axis=-1)
     u = xp.asarray(np.random.rand(len(z), 1).astype(np.float32)) * cdf[:, -1:]
-    # u is below the total, which is cdf's last entry, so every row has a crossing
+    # first crossing, not a count of cdf < u: a parallel float32 cumsum dips. u < cdf[-1], so one exists
     return xp.to_numpy((cdf >= u).argmax(axis=-1))

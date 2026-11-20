@@ -1,13 +1,3 @@
-"""MLX backend: the Apple GPU through Metal.
-
-MLX copies the NumPy API, so most of this module is re-exports. Two differences
-matter. MLX arrays are immutable, which is why no gradient in mlops.py is ever
-updated in place. And MLX is lazy: each op only records itself, and the work runs
-when a value is needed (`.item()`, a print, or `realize`). The optimizer realizes
-the weights after every step, or each step's graph would hang off the last one.
-
-MLX has no float64 on the GPU; float64 input comes in as float32.
-"""
 import mlx.core as mx
 import numpy as np
 from mlx.core import (
@@ -73,7 +63,7 @@ def asarray(x, dtype=None):
 
 
 def to_numpy(x):
-    # NumPy has no bfloat16; widen it first (exact, bf16 is a truncated float32)
+    # numpy has no bfloat16; widening to float32 is exact
     return np.array(x.astype(mx.float32) if x.dtype == mx.bfloat16 else x)
 
 
@@ -86,16 +76,16 @@ def is_float(dt):
 
 
 realize = mx.eval
-clear_cache = mx.clear_cache  # freed buffers stay in MLX's cache for reuse until this
+clear_cache = mx.clear_cache  # mlx keeps freed buffers cached for reuse until this
 
 
 def scatter_add(shape, key, values):
     return mx.zeros(shape, dtype=values.dtype).at[key].add(values)
 
 
-# shortcut: im2col runs on the device, but col2im (conv's backward) round-trips through the CPU; write it in MLX if a CNN trains on metal
+# shortcut: col2im (conv backward) round-trips through the CPU, port it to MLX if a CNN trains on metal
 def im2col(x, *args):
-    return cpu.im2col(x, *args, xp=mx)  # on the device; col2im, used only in training, still goes through the CPU
+    return cpu.im2col(x, *args, xp=mx)
 
 
 def col2im(cols, *args):
@@ -103,7 +93,7 @@ def col2im(cols, *args):
 
 
 def fused_attention(q, k, v):
-    """mlops.Attention's forward as one Metal kernel; None for shapes the kernels don't cover (the reference math runs)."""
+    """Metal attention forward, or None for shapes the kernels don't cover."""
     D = q.shape[-1]
     if D % 8 or D > 128:
         return None
@@ -112,5 +102,5 @@ def fused_attention(q, k, v):
 
 
 def quant_matmul(x, packed, scales, biases, bits, group):
-    """x (M, K) @ the dequantized (N, K) weight, transposed, for small M (decode): see metal_quant.py."""
+    """x (M, K) @ dequantized W (N, K).T as one Metal kernel, for decode-sized M."""
     return metal_quant.quant_matmul(x, packed, scales, biases, bits, group)

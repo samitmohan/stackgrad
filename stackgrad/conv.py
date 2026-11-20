@@ -32,7 +32,6 @@ class Conv2d(Module):
         OH = (H + 2 * self.padding - kh) // self.stride + 1
         OW = (W + 2 * self.padding - kw) // self.stride + 1
 
-        # every output pixel is one patch row dotted with every filter
         cols = x.im2col(kh, kw, self.stride, self.padding)    # (N*OH*OW, C*kh*kw)
         out = cols @ self.weight.T + self.bias               # (N*OH*OW, out_channels)
         return out.reshape(N, OH, OW, self.out_channels).permute(0, 3, 1, 2)

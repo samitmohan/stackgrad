@@ -1,15 +1,3 @@
-"""Continuous batching: requests join and leave the running batch between decode steps.
-
-A static batch waits for its longest sequence, so short requests sit idle. Here
-every `step()` first admits waiting requests (one prefill pass each), then runs one
-decode step for everything running. A request leaves the moment it emits its stop
-token or hits max_tokens, and its KV blocks go straight to the next request.
-
-When a decode step needs a block and none is free, the newest running request is
-preempted: its blocks and cache are dropped and it goes back to the front of the
-queue. On readmission it prefills prompt + everything it has generated so far,
-which rebuilds the same cache (recompute instead of swapping to host memory).
-"""
 from collections import deque
 from dataclasses import dataclass, field
 
@@ -29,8 +17,8 @@ class Request:
 
 
 class Scheduler:
+    """Continuous batching: requests join and leave the running batch between decode steps."""
     def __init__(self, runner, blocks, max_batch=8):
-        """`runner` runs the model (see runner.py); `blocks` is the BlockManager that budgets its KV cache."""
         self.runner, self.blocks, self.max_batch = runner, blocks, max_batch
         self.waiting, self.running = deque(), []
         self.preemptions = 0
@@ -51,7 +39,6 @@ class Scheduler:
     def step(self):
         """Admit, prefill, decode once. Returns the (request, token) pairs produced this step."""
         emitted = []
-        # admit in arrival order while a batch slot and the whole prefix's blocks are free
         while self.waiting and len(self.running) < self.max_batch:
             req = self.waiting[0]
             tokens = req.prompt + req.out  # a preempted request also replays what it already generated
@@ -63,11 +50,11 @@ class Scheduler:
             self.running.append(req)
         self._retire()
 
-        # requests admitted this step already have their token; the rest decode once
+        # requests admitted this step already got their token from prefill
         fresh = {id(r) for r, _ in emitted}
         decode = [r for r in self.running if id(r) not in fresh]
         for req in list(decode):
-            # room for the token about to be fed back in, preempting the newest request until it fits
+            # room for the fed-back token: preempt the newest request until it fits; it recomputes on readmission
             while req in self.running and not self.blocks.can_append(req.id, 1):
                 victim = self.running[-1]
                 self._preempt(victim)

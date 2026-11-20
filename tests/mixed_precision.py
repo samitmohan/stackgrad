@@ -1,7 +1,3 @@
-"""Mixed precision (stackgrad.autocast): 16-bit multiplies, float32 weights and gradients, nearly the same numbers.
-
-    uv run python tests/mixed_precision.py
-"""
 import sys
 from pathlib import Path
 

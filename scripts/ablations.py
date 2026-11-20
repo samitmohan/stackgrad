@@ -1,11 +1,3 @@
-"""The CS336 A1 ablations, summarized from their runs: what each variant changes and where its loss ends.
-
-    uv run python scripts/ablations.py      # reads runs/abl_*, writes bench/results/ablations.json
-
-The runs come from train_gpt.py on bqa3 (gpu_queue.sh): the story model for 10,000 steps, once as it
-is and once per variant. A run that diverged records the step where its loss first stopped being a
-number; its validation loss after that is NaN, written here as null.
-"""
 import json
 import math
 from pathlib import Path

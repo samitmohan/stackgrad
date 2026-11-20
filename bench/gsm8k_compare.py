@@ -1,12 +1,3 @@
-"""Two GSM8K evaluations on the same problems, compared problem by problem.
-
-    uv run python bench/gsm8k_compare.py gsm8k_base gsm8k_grpo_gsm8k
-
-Counts the problems the second model fixed (the first got wrong) and broke (the first got right).
-Only those disagreements say which model is better. If the two were equally good, each disagreement
-would go either way with probability 1/2, so the exact two-sided sign test gives the chance of a
-split at least this uneven. Writes bench/results/<first>_vs_<second>.json.
-"""
 import json
 import math
 import sys

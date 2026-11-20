@@ -1,11 +1,3 @@
-"""Qwen3-0.6B in stackgrad against Hugging Face transformers (the oracle), from the same checkpoint.
-
-    uv run python tests/qwen3.py            # needs data/Qwen3-0.6B (see stackgrad/qwen3.py)
-
-1. Logits for a prompt: stackgrad float32 on NumPy and on Metal against HF float32 on CPU,
-   then stackgrad bfloat16 on Metal (looser; the gap is printed).
-2. Greedy decoding through stackgrad's KV cache picks the same 24 tokens as HF's generate.
-"""
 import json
 import sys
 from pathlib import Path

@@ -1,4 +1,3 @@
-"""NumPy backend: the readable reference."""
 import numpy as np
 from numpy import (
     broadcast_to,
@@ -57,11 +56,10 @@ def asarray(x, dtype=None):
 
 
 def to_numpy(x):
-    return np.array(x)  # a copy, as every other backend's device-to-host transfer is
+    return np.array(x)  # a copy, like every other backend's device-to-host transfer
 
 
 def dtype(name):
-    """"float32", "float16", ... -> this backend's dtype object."""
     return np.dtype(name)
 
 
@@ -70,15 +68,15 @@ def is_float(dt):
 
 
 def realize(*arrays):
-    """Finish computing `arrays`. NumPy computes each op as it is called, so there is nothing to do."""
+    """NumPy runs each op as it is called, so there is nothing to wait for."""
 
 
 def clear_cache():
-    """Give the memory a backend keeps for reuse back to the system. NumPy keeps none."""
+    """NumPy keeps no memory pool to free."""
 
 
 def sigmoid(x):
-    # exp(-x) overflows to inf for very negative x, and 1 / inf = 0 is the right answer
+    # exp(-x) overflows to inf for very negative x, and 1 / inf = 0 is correct
     with np.errstate(over="ignore"):
         return 1.0 / (1.0 + np.exp(-x))
 
@@ -91,18 +89,13 @@ def scatter_add(shape, key, values):
 
 
 def im2col(x, kh, kw, stride, padding, xp=np):
-    """(N, C, H, W) -> (N*OH*OW, C*kh*kw): one row per output pixel, holding its input patch.
-
-    Built from kh * kw strided slices, one per kernel offset, stacked: no writes into an array,
-    so the same code runs on the GPU backends (MLX arrays cannot be written in place).
-    """
+    """(N, C, H, W) -> (N*OH*OW, C*kh*kw), one row per output pixel; no in-place writes, so MLX runs it."""
     N, C = x.shape[:2]
     if padding > 0:
         x = xp.pad(x, ((0, 0), (0, 0), (padding, padding), (padding, padding)))
     OH = (x.shape[2] - kh) // stride + 1
     OW = (x.shape[3] - kw) // stride + 1
-    # channels last first, so the stack lands in row order and the reshape copies nothing: one 256-channel
-    # 3x3 im2col at 512x512 peaked at 2.95 GB this way on the M4, 5.37 GB stacking NCHW and transposing after
+    # channels last so the reshape copies nothing: 2.95 GB peak vs 5.37 GB for NCHW (256ch 3x3, 512x512, M4)
     x = x.transpose(0, 2, 3, 1)
     patches = [x[:, y:y + stride * OH:stride, xx:xx + stride * OW:stride, :] for y in range(kh) for xx in range(kw)]
     return xp.stack(patches, axis=-1).reshape(N * OH * OW, C * kh * kw)  # (N, OH, OW, C, kh*kw) -> rows

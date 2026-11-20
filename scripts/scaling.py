@@ -1,15 +1,3 @@
-"""Scaling laws from my own runs (CS336 A3, Chinchilla's IsoFLOP method): how big a model each compute budget wants.
-
-    CUPY_TF32=1 uv run --no-dev python scripts/scaling.py run --device cuda    # bqa3: trains the grid
-    uv run python scripts/scaling.py fit                                        # bench/results/scaling.json
-
-For each compute budget C (FLOPs), TinyStories models of several sizes N train on exactly
-C / (6 N) tokens, each with its own warmup and cosine schedule, and report a final validation
-loss. N counts the parameters in matrix multiplies, the ones that cost 6 FLOPs per token.
-Along one budget, loss against log N is close to a parabola, and its bottom is the budget's
-compute-optimal size. A line through those optima on log-log axes, N_opt = k C^a, says how to
-grow the model as compute grows, and D_opt = C / (6 N_opt) gives the tokens.
-"""
 import argparse
 import json
 import subprocess
@@ -25,7 +13,6 @@ LAYERS, VOCAB, BATCH, CONTEXT = 4, 10_000, 32, 256
 
 
 def shape(d_model):
-    """(heads, d_ff, matmul parameters) at d_model: 32-wide heads and SwiGLU's d_ff = 8/3 d_model, to a multiple of 64."""
     d_ff = round(8 / 3 * d_model / 64) * 64
     return d_model // 32, d_ff, LAYERS * (4 * d_model ** 2 + 3 * d_model * d_ff) + VOCAB * d_model
 

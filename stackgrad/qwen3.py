@@ -1,11 +1,3 @@
-"""Qwen3 in stackgrad: TransformerLM with Qwen3's options, loaded from a Hugging Face checkpoint.
-
-    model = load_qwen3("data/Qwen3-0.6B")    # config.json + model.safetensors
-
-Qwen3 differs from the CS336 model in four settings, not in structure: a head_dim
-set apart from d_model / n_heads, RMSNorm on each head's queries and keys, an
-RMSNorm epsilon of 1e-6, and an output head that reuses the embedding table.
-"""
 import json
 from pathlib import Path
 
@@ -30,7 +22,7 @@ def config(path):
 
 
 def hf_names(n_layers):
-    """stackgrad parameter name -> (Hugging Face tensor name, transpose?). HF Linear weights are (out, in); stackgrad's are (in, out)."""
+    """stackgrad name -> (HF tensor name, transpose?); HF Linear weights are (out, in), stackgrad's (in, out)."""
     names = {"embed.weight": ("model.embed_tokens.weight", False), "norm.weight": ("model.norm.weight", False)}
     for i in range(n_layers):
         mine, hf = f"blocks.{i}.", f"model.layers.{i}."
@@ -46,17 +38,17 @@ def hf_names(n_layers):
 
 
 def load_qwen3(path, context_length=4096):
+    """TransformerLM from a Hugging Face Qwen3 directory (config.json and *.safetensors)."""
     cfg = config(path) | {"context_length": context_length}
-    # shortcut: the model draws a random init (14.7 of a 19.6 s load) that the checkpoint overwrites; skip it if loads start to hurt
+    # shortcut: the checkpoint overwrites the random init (14.7 of a 19.6 s load); skip it if loads start to hurt
     model = TransformerLM(**cfg)
     params = dict(model.named_parameters())
     names = hf_names(cfg["n_layers"])
-    # fail loudly on any name the mapping misses or invents: a skipped tensor would keep its random init
+    # a skipped tensor would keep its random init
     assert params.keys() == names.keys(), (sorted(params.keys() - names.keys())[:3], sorted(names.keys() - params.keys())[:3])
     unplaced = {hf: (name, transpose) for name, (hf, transpose) in names.items()}
     lm_head = None
-    # one tensor at a time, each replacing its random init as it lands: for Qwen3-1.7B, holding every
-    # float32 weight beside the init at once would take 16 GB. Large checkpoints split into several files
+    # one tensor at a time: Qwen3-1.7B's float32 weights beside the init would take 16 GB
     for shard in sorted(Path(path).glob("*.safetensors")):
         for hf, w in iter_safetensors(shard):
             hf = hf if hf.startswith(("model.", "lm_head.")) else "model." + hf  # Qwen3-Embedding saves its names without the prefix
@@ -92,14 +84,8 @@ _TOOLS_FOOTER = ("\n</tools>\n\nFor each function call, return a json object wit
 
 
 def chat_prompt(messages, think=False, tools=None):
-    """Qwen3's chat template: [{"role": ..., "content": ...}] -> prompt text that ends where the reply starts.
-
-    think=False closes an empty <think> block, which is how Qwen3 switches its reasoning off. tools lists
-    function schemas ({"type": "function", "function": {...}}); Qwen3 calls one by writing
-    <tool_call>{"name": ..., "arguments": {...}}</tool_call> and ending its turn, an assistant message
-    carries that text back as it was, and a "tool" message carries the result.
-    """
-    # shortcut: earlier assistant turns keep any <think>...</think> text (HF's template strips it); strip it if a long agent conversation needs the room
+    """Qwen3's chat template: messages -> prompt text ending where the reply starts; think=False skips reasoning."""
+    # shortcut: earlier assistant turns keep their <think> text (HF strips it); strip it if agent chats run long
     text = ""
     if tools:
         system = messages[0]["content"] + "\n\n" if messages[0]["role"] == "system" else ""
@@ -109,7 +95,7 @@ def chat_prompt(messages, think=False, tools=None):
         if m["role"] != "tool":
             text += f"<|im_start|>{m['role']}\n{m['content']}<|im_end|>\n"
             continue
-        # consecutive tool results share one user turn, each in its own <tool_response> block
+        # consecutive tool results share one user turn
         if i == 0 or messages[i - 1]["role"] != "tool":
             text += "<|im_start|>user"
         text += f"\n<tool_response>\n{m['content']}\n</tool_response>"

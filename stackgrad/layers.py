@@ -7,19 +7,13 @@ from .tensor import Tensor
 
 
 class Linear(Module):
-    """Fully-connected layer `y = x @ W + b`.
-
-    Weights use Kaiming init by default (`init='xavier'` for glorot). Accepts any
-    input shape ending in `in_features`.
-    """
+    """Fully-connected layer `y = x @ W + b` over the last dim, Kaiming init by default (`init='xavier'`)."""
     def __init__(self, in_features, out_features, bias=True, init='kaiming'):
         super().__init__()
         assert in_features > 0 and out_features > 0, "features must be positive"
         if init == 'xavier':
-            # glorot uniform - good for sigmoid/tanh
             scale = np.sqrt(2.0 / (in_features + out_features))
         else:
-            # kaiming - good for relu
             scale = np.sqrt(2.0 / in_features)
         self.weight = Tensor(
             (np.random.randn(in_features, out_features) * scale).astype(np.float32),
@@ -32,11 +26,11 @@ class Linear(Module):
 
     def forward(self, x):
         assert x.shape[-1] == self.weight.shape[0], f"Linear expects last dim {self.weight.shape[0]}, got {x.shape[-1]}"
-        # (..., in) -> (rows, in): one GEMM, and a weight grad without a (batch, in, out) stack to sum
+        # flatten to 2-d: one GEMM, and the weight grad needs no (batch, in, out) stack to sum
         rows = x.reshape(-1, x.shape[-1])
         if T._autocast is None:
             y = rows @ self.weight
-        else:  # mixed precision: the multiply in 16 bits, everything after it in float32
+        else:
             y = (rows.cast(T._autocast) @ self.weight.cast(T._autocast)).cast("float32")
         y = y.reshape(*x.shape[:-1], self.weight.shape[1])
         if self.bias is not None:
@@ -78,7 +72,7 @@ class GELU(Module):
 
 
 class LayerNorm(Module):
-    """Normalize over the last dimension. Works on any (..., num_features) input."""
+    """Normalize over the last dimension of any (..., num_features) input."""
     def __init__(self, num_features, eps=1e-5):
         super().__init__()
         assert num_features > 0, "num_features must be positive"
@@ -96,8 +90,7 @@ class LayerNorm(Module):
 
 
 class GroupNorm(Module):
-    """Normalize each group of channels of an (N, C, ...) input over the group's channels and positions,
-    then scale and shift each channel. Stable Diffusion's UNet and VAE use 32 groups."""
+    """Normalize each group of channels of an (N, C, ...) input, then scale and shift each channel."""
     def __init__(self, num_groups, num_channels, eps=1e-5):
         super().__init__()
         assert num_channels % num_groups == 0, "channels must split evenly into groups"
@@ -125,15 +118,11 @@ class Embedding(Module):
         )
 
     def forward(self, idx):
-        # idx is a numpy int array of any shape; getitem scatters grad back on backward
         return self.weight[np.asarray(idx)]
 
 
 class Dropout(Module):
-    """Zero each activation with probability `p` during training, scaling the rest.
-
-    A no-op in eval mode (`module.eval()`).
-    """
+    """Zero each activation with probability `p` during training, scaling the rest; a no-op in eval."""
     def __init__(self, p=0.5):
         super().__init__()
         assert 0.0 <= p < 1.0, "dropout probability must be in [0, 1)"
@@ -147,10 +136,7 @@ class Dropout(Module):
 
 
 class BatchNorm1d(Module):
-    """Normalize a `(batch, features)` input per feature, with learnable scale/shift.
-
-    Tracks running mean and variance for use at eval time.
-    """
+    """Normalize a `(batch, features)` input per feature, tracking running stats for eval."""
     def __init__(self, num_features, eps=1e-5, momentum=0.1):
         super().__init__()
         assert num_features > 0, "num_features must be positive"
@@ -171,7 +157,7 @@ class BatchNorm1d(Module):
             var = (diff ** 2).mean(axis=0, keepdims=True)
             x_hat = diff / (var + self.eps) ** 0.5
 
-            # running stats stay NumPy arrays on the host, whatever the device (state_dict saves them as buffers)
+            # running stats stay host NumPy arrays on any device, so state_dict saves them as buffers
             self.running_mean = (1 - self.momentum) * self.running_mean + self.momentum * mean.numpy().flatten()
             self.running_var = (1 - self.momentum) * self.running_var + self.momentum * var.numpy().flatten()
         else:
@@ -194,24 +180,20 @@ class RMSNorm(Module):
 
 
 class DepthAttention(Module):
-    """Attention over depth, from Attention Residuals: a layer's input is a softmax-weighted mix of earlier layers'
-    outputs instead of their plain sum. One learned query per layer scores each source's RMS-normalized output; the
-    softmax runs over the sources, and the raw outputs are mixed. The query starts at zero, so every source starts
-    with the same weight. https://samitmohan.in/blog/attention-residuals"""
+    """Attention Residuals: a layer's input is a learned softmax mix of earlier layers' outputs, not their sum."""
     def __init__(self, d_model, eps=1e-5):
         super().__init__()
         self.query = Tensor(np.zeros(d_model, dtype=np.float32), requires_grad=True)
         self.norm = RMSNorm(d_model, eps)
 
     def forward(self, sources):
-        """sources: a list of (B, T, D) tensors -> their mix, (B, T, D)."""
         v = T.stack(sources)                                            # (N, B, T, D)
         scores = (self.norm(v) * self.query).sum(axis=-1, keepdims=True)  # (N, B, T, 1): keys normalized, values raw
         return (F.softmax(scores, axis=0) * v).sum(axis=0)
 
 
 class SiLUMLP(Module):
-    """The ungated feed-forward: w2(silu(w1 x)), no biases. The CS336 ablation SwiGLU is measured against."""
+    """Ungated feed-forward w2(silu(w1 x)), the baseline for the CS336 SwiGLU ablation."""
     def __init__(self, d_model, d_ff):
         super().__init__()
         self.w1 = Linear(d_model, d_ff, bias=False)

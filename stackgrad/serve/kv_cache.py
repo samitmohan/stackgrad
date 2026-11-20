@@ -1,17 +1,5 @@
-"""Paged KV-cache bookkeeping: which fixed-size blocks of cache memory each sequence owns.
-
-The cache is a pool of `num_blocks` blocks of `block_size` token slots. A sequence
-takes blocks one at a time as it grows and returns them all when it finishes, so
-memory goes to sequences in proportion to their length instead of every sequence
-reserving the maximum up front. A sequence's block table lists its blocks in order:
-token t lives in block table[t // block_size], slot t % block_size.
-
-This file only does the accounting. The scheduler asks it whether a sequence fits
-before running it; a paged attention kernel would read K and V through the tables.
-"""
-
-
 class BlockManager:
+    """Paged KV-cache bookkeeping: which fixed-size blocks of cache memory each sequence owns."""
     def __init__(self, num_blocks, block_size=16):
         self.block_size = block_size
         self.num_blocks = num_blocks

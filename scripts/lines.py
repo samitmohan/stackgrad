@@ -1,9 +1,3 @@
-"""How big stackgrad is: lines per component, the way tinygrad and nanoGPT state their size.
-
-    uv run python scripts/lines.py      # writes bench/results/lines.json
-
-A line counts when it holds code or a docstring: blank lines and comment-only lines do not.
-"""
 import json
 from pathlib import Path
 

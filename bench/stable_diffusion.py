@@ -1,13 +1,3 @@
-"""Stable Diffusion in stackgrad against diffusers on the same Mac: speed per step, and how far apart the images land.
-
-    uv run python bench/stable_diffusion.py
-
-Both pipelines turn the same prompt and the same starting noise into a 512x512 image with 25 DDIM
-steps and guidance 7.5, in float32 on the Apple GPU: stackgrad through MLX, diffusers through
-PyTorch's MPS backend. They run one after the other, so only one sits in memory. A step is one
-UNet call on the prompt and the empty prompt together, timed until the GPU finishes. Writes
-bench/results/stable_diffusion.json and both images, then profiles one UNet call op by op.
-"""
 import json
 import sys
 import time
@@ -37,7 +27,7 @@ STEPS, GUIDANCE, SIZE = 25, 7.5, 512
 
 
 def diffusers_generate(noise):
-    """The reference pipeline, assembled from the same five folders (the download has no safety checker)."""
+    """The reference pipeline from the same five folders; the download has no safety checker."""
     def part(cls, sub):
         return cls.from_pretrained(PATH / sub, variant="fp16", torch_dtype=torch.float32)
     pipe = StableDiffusionPipeline(
@@ -59,7 +49,6 @@ def diffusers_generate(noise):
 
 
 def profile_unet():
-    """One guided UNet call (batch 2, a 64x64 latent) on the Apple GPU, timed one primitive at a time."""
     unet = load_unet(PATH, "metal")
     x = Tensor(np.zeros((2, 4, SIZE // 8, SIZE // 8), np.float32), device="metal")
     context = Tensor(np.zeros((2, 77, 768), np.float32), device="metal")  # its values don't change the work
