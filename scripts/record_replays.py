@@ -40,80 +40,80 @@ AGENT = [
 
 
 def post(url, body, timeout=600):
-    req = urllib.request.Request(url, json.dumps(body).encode(), {"content-type": "application/json"})
-    start = time.perf_counter()
-    with urllib.request.urlopen(req, timeout=timeout) as res:
-        out = json.loads(res.read())
-    return out, time.perf_counter() - start
+  req = urllib.request.Request(url, json.dumps(body).encode(), {"content-type": "application/json"})
+  start = time.perf_counter()
+  with urllib.request.urlopen(req, timeout=timeout) as res:
+    out = json.loads(res.read())
+  return out, time.perf_counter() - start
 
 
 def chat(url, text):
-    """One streamed reply, sent as the Chat figure sends it."""
-    body = {"messages": [{"role": "user", "content": text}], "stream": True, "max_tokens": 400, "temperature": 0.7}
-    req = urllib.request.Request(url + "/v1/chat/completions", json.dumps(body).encode(), {"content-type": "application/json"})
-    start = time.perf_counter()
-    chunks, usage = [], None
-    with urllib.request.urlopen(req, timeout=600) as res:
-        for line in res:
-            line = line.decode().strip()
-            if not line.startswith("data: ") or line == "data: [DONE]":
-                continue
-            data = json.loads(line[6:])
-            if "error" in data:
-                raise RuntimeError(data["error"]["message"])
-            delta = data["choices"][0]["delta"].get("content")
-            if delta:
-                chunks.append([round(time.perf_counter() - start, 3), delta])
-            usage = data.get("usage", usage)
-    return {"message": text, "chunks": chunks, "completion_tokens": usage["completion_tokens"],
-            "seconds": round(time.perf_counter() - start, 3)}
+  """One streamed reply, sent as the Chat figure sends it."""
+  body = {"messages": [{"role": "user", "content": text}], "stream": True, "max_tokens": 400, "temperature": 0.7}
+  req = urllib.request.Request(url + "/v1/chat/completions", json.dumps(body).encode(), {"content-type": "application/json"})
+  start = time.perf_counter()
+  chunks, usage = [], None
+  with urllib.request.urlopen(req, timeout=600) as res:
+    for line in res:
+      line = line.decode().strip()
+      if not line.startswith("data: ") or line == "data: [DONE]":
+        continue
+      data = json.loads(line[6:])
+      if "error" in data:
+        raise RuntimeError(data["error"]["message"])
+      delta = data["choices"][0]["delta"].get("content")
+      if delta:
+        chunks.append([round(time.perf_counter() - start, 3), delta])
+      usage = data.get("usage", usage)
+  return {"message": text, "chunks": chunks, "completion_tokens": usage["completion_tokens"],
+          "seconds": round(time.perf_counter() - start, 3)}
 
 
 def save(name, data):
-    OUT.mkdir(parents=True, exist_ok=True)
-    (OUT / f"{name}.json").write_text(json.dumps(data, ensure_ascii=False) + "\n")
-    print(f"{name}: {len(json.dumps(data)) / 1024:.0f} KB")
+  OUT.mkdir(parents=True, exist_ok=True)
+  (OUT / f"{name}.json").write_text(json.dumps(data, ensure_ascii=False) + "\n")
+  print(f"{name}: {len(json.dumps(data)) / 1024:.0f} KB")
 
 
 def main():
-    p = argparse.ArgumentParser()
-    p.add_argument("--url", default="http://localhost:8000")
-    p.add_argument("--only", nargs="*", help="record these figures only")
-    args = p.parse_args()
-    u = args.url
-    want = set(args.only or ["graph", "gradcheck", "bpe", "attention", "generate", "chat", "rag", "agent"])
+  p = argparse.ArgumentParser()
+  p.add_argument("--url", default="http://localhost:8000")
+  p.add_argument("--only", nargs="*", help="record these figures only")
+  args = p.parse_args()
+  u = args.url
+  want = set(args.only or ["graph", "gradcheck", "bpe", "attention", "generate", "chat", "rag", "agent"])
 
-    if "graph" in want:
-        save("graph", [{"expr": e, "variables": v, "graph": post(u + "/api/graph", {"expr": e, "variables": v})[0]} for e, v in GRAPHS])
-    if "gradcheck" in want:
-        results, seconds = post(u + "/api/gradcheck", {})
-        save("gradcheck", {"results": results, "seconds": round(seconds, 2)})
-    if "bpe" in want:
-        save("bpe", [{"text": t, **post(u + "/api/bpe", {"text": t})[0]} for t in BPE])
-    if "attention" in want:
-        save("attention", [post(u + "/api/attention", {"text": t})[0] for t in ATTENTION])
-    if "generate" in want:
-        post(u + "/api/generate", {"run": "tinystories", "prompt": "Once", "max_tokens": 8})  # loads the checkpoint
-        rows = []
-        for prompt in STORY_PROMPTS:
-            for t in TEMPERATURES:
-                req = {"run": "tinystories", "prompt": prompt, "max_tokens": 120, "temperature": t, "top_p": 0.95}
-                out, seconds = post(u + "/api/generate", req)
-                rows.append(req | out | {"seconds": round(seconds, 3)})
-        save("generate", rows)
-    if "chat" in want:
-        chat(u, "Hi")  # the first request loads Qwen3-0.6B onto the GPU; the figure's note says so
-        save("chat", [chat(u, m) for m in CHATS])
-    if "rag" in want:
-        post(u + "/api/rag", {"question": RAG[0]})  # loads the embedder and the index
-        save("rag", [{"question": q, **post(u + "/api/rag", {"question": q})[0]} for q in RAG])
-    if "agent" in want:
-        rows = []
-        for q in AGENT:
-            out, seconds = post(u + "/api/agent", {"question": q})
-            rows.append({"question": q, **out, "seconds": round(seconds, 2)})
-        save("agent", rows)
+  if "graph" in want:
+    save("graph", [{"expr": e, "variables": v, "graph": post(u + "/api/graph", {"expr": e, "variables": v})[0]} for e, v in GRAPHS])
+  if "gradcheck" in want:
+    results, seconds = post(u + "/api/gradcheck", {})
+    save("gradcheck", {"results": results, "seconds": round(seconds, 2)})
+  if "bpe" in want:
+    save("bpe", [{"text": t, **post(u + "/api/bpe", {"text": t})[0]} for t in BPE])
+  if "attention" in want:
+    save("attention", [post(u + "/api/attention", {"text": t})[0] for t in ATTENTION])
+  if "generate" in want:
+    post(u + "/api/generate", {"run": "tinystories", "prompt": "Once", "max_tokens": 8})  # loads the checkpoint
+    rows = []
+    for prompt in STORY_PROMPTS:
+      for t in TEMPERATURES:
+        req = {"run": "tinystories", "prompt": prompt, "max_tokens": 120, "temperature": t, "top_p": 0.95}
+        out, seconds = post(u + "/api/generate", req)
+        rows.append(req | out | {"seconds": round(seconds, 3)})
+    save("generate", rows)
+  if "chat" in want:
+    chat(u, "Hi")  # the first request loads Qwen3-0.6B onto the GPU; the figure's note says so
+    save("chat", [chat(u, m) for m in CHATS])
+  if "rag" in want:
+    post(u + "/api/rag", {"question": RAG[0]})  # loads the embedder and the index
+    save("rag", [{"question": q, **post(u + "/api/rag", {"question": q})[0]} for q in RAG])
+  if "agent" in want:
+    rows = []
+    for q in AGENT:
+      out, seconds = post(u + "/api/agent", {"question": q})
+      rows.append({"question": q, **out, "seconds": round(seconds, 2)})
+    save("agent", rows)
 
 
 if __name__ == "__main__":
-    main()
+  main()

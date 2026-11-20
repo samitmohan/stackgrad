@@ -2,54 +2,54 @@ import numpy as np
 
 
 def numerical_gradient(f, inputs, eps=1e-5):
-    """Estimate gradients of `f` w.r.t. each input by central differences."""
-    grads = []
-    # perturb in float64 for precision
-    orig_data = [inp.data.copy() for inp in inputs]
-    for inp in inputs:
-        inp.data = inp.data.astype(np.float64)
-    f64_data = [inp.data.copy() for inp in inputs]
+  """Estimate gradients of `f` w.r.t. each input by central differences."""
+  grads = []
+  # perturb in float64 for precision
+  orig_data = [inp.data.copy() for inp in inputs]
+  for inp in inputs:
+    inp.data = inp.data.astype(np.float64)
+  f64_data = [inp.data.copy() for inp in inputs]
 
-    for k, inp in enumerate(inputs):
-        grad = np.zeros(inp.data.shape, dtype=np.float64)
-        it = np.nditer(f64_data[k], flags=['multi_index'])
-        while not it.finished:
-            idx = it.multi_index
-            old_val = f64_data[k][idx]
+  for k, inp in enumerate(inputs):
+    grad = np.zeros(inp.data.shape, dtype=np.float64)
+    it = np.nditer(f64_data[k], flags=['multi_index'])
+    while not it.finished:
+      idx = it.multi_index
+      old_val = f64_data[k][idx]
 
-            inp.data = f64_data[k].copy()
-            inp.data[idx] = old_val + eps
-            loss_plus = float(f().data)
+      inp.data = f64_data[k].copy()
+      inp.data[idx] = old_val + eps
+      loss_plus = float(f().data)
 
-            inp.data = f64_data[k].copy()
-            inp.data[idx] = old_val - eps
-            loss_minus = float(f().data)
+      inp.data = f64_data[k].copy()
+      inp.data[idx] = old_val - eps
+      loss_minus = float(f().data)
 
-            grad[idx] = (loss_plus - loss_minus) / (2 * eps)
-            it.iternext()
-        inp.data = f64_data[k].copy()
-        grads.append(grad.astype(np.float32))
+      grad[idx] = (loss_plus - loss_minus) / (2 * eps)
+      it.iternext()
+    inp.data = f64_data[k].copy()
+    grads.append(grad.astype(np.float32))
 
-    for inp, od in zip(inputs, orig_data):
-        inp.data = od
-    return grads
+  for inp, od in zip(inputs, orig_data):
+    inp.data = od
+  return grads
 
 
 def check_gradient(f, inputs, eps=1e-5, atol=1e-4, rtol=1e-3):
-    """Compare backward() gradients against numerical ones, raising AssertionError past the tolerance."""
-    for inp in inputs:
-        inp.zero_grad()
-    loss = f()
-    loss.backward()
-    analytic = [inp.grad.copy() for inp in inputs]
+  """Compare backward() gradients against numerical ones, raising AssertionError past the tolerance."""
+  for inp in inputs:
+    inp.zero_grad()
+  loss = f()
+  loss.backward()
+  analytic = [inp.grad.copy() for inp in inputs]
 
-    numerical = numerical_gradient(f, inputs, eps)
+  numerical = numerical_gradient(f, inputs, eps)
 
-    for i, (a, n) in enumerate(zip(analytic, numerical)):
-        if not np.allclose(a, n, atol=atol, rtol=rtol):
-            max_diff = np.max(np.abs(a - n))
-            raise AssertionError(
-                f"Gradient check failed for input {i}: max diff = {max_diff}\n"
-                f"Analytic:\n{a}\nNumerical:\n{n}"
-            )
-    return True
+  for i, (a, n) in enumerate(zip(analytic, numerical)):
+    if not np.allclose(a, n, atol=atol, rtol=rtol):
+      max_diff = np.max(np.abs(a - n))
+      raise AssertionError(
+          f"Gradient check failed for input {i}: max diff = {max_diff}\n"
+          f"Analytic:\n{a}\nNumerical:\n{n}"
+      )
+  return True

@@ -51,66 +51,66 @@ __all__ = [
 
 
 def asarray(x, dtype=None):
-    """Any array, list, or number -> an array of this backend."""
-    return np.asarray(x, dtype=dtype)
+  """Any array, list, or number -> an array of this backend."""
+  return np.asarray(x, dtype=dtype)
 
 
 def to_numpy(x):
-    return np.array(x)  # a copy, like every other backend's device-to-host transfer
+  return np.array(x)  # a copy, like every other backend's device-to-host transfer
 
 
 def dtype(name):
-    return np.dtype(name)
+  return np.dtype(name)
 
 
 def is_float(dt):
-    return np.issubdtype(dt, np.floating)
+  return np.issubdtype(dt, np.floating)
 
 
 def realize(*arrays):
-    """NumPy runs each op as it is called, so there is nothing to wait for."""
+  """NumPy runs each op as it is called, so there is nothing to wait for."""
 
 
 def clear_cache():
-    """NumPy keeps no memory pool to free."""
+  """NumPy keeps no memory pool to free."""
 
 
 def sigmoid(x):
-    # exp(-x) overflows to inf for very negative x, and 1 / inf = 0 is correct
-    with np.errstate(over="ignore"):
-        return 1.0 / (1.0 + np.exp(-x))
+  # exp(-x) overflows to inf for very negative x, and 1 / inf = 0 is correct
+  with np.errstate(over="ignore"):
+    return 1.0 / (1.0 + np.exp(-x))
 
 
 def scatter_add(shape, key, values):
-    """zeros(shape) with `values` added at `key`, summing where an index repeats."""
-    out = np.zeros(shape, dtype=values.dtype)
-    np.add.at(out, key, values)
-    return out
+  """zeros(shape) with `values` added at `key`, summing where an index repeats."""
+  out = np.zeros(shape, dtype=values.dtype)
+  np.add.at(out, key, values)
+  return out
 
 
 def im2col(x, kh, kw, stride, padding, xp=np):
-    """(N, C, H, W) -> (N*OH*OW, C*kh*kw), one row per output pixel; no in-place writes, so MLX runs it."""
-    N, C = x.shape[:2]
-    if padding > 0:
-        x = xp.pad(x, ((0, 0), (0, 0), (padding, padding), (padding, padding)))
-    OH = (x.shape[2] - kh) // stride + 1
-    OW = (x.shape[3] - kw) // stride + 1
-    # channels last so the reshape copies nothing: 2.95 GB peak vs 5.37 GB for NCHW (256ch 3x3, 512x512, M4)
-    x = x.transpose(0, 2, 3, 1)
-    patches = [x[:, y:y + stride * OH:stride, xx:xx + stride * OW:stride, :] for y in range(kh) for xx in range(kw)]
-    return xp.stack(patches, axis=-1).reshape(N * OH * OW, C * kh * kw)  # (N, OH, OW, C, kh*kw) -> rows
+  """(N, C, H, W) -> (N*OH*OW, C*kh*kw), one row per output pixel; no in-place writes, so MLX runs it."""
+  N, C = x.shape[:2]
+  if padding > 0:
+    x = xp.pad(x, ((0, 0), (0, 0), (padding, padding), (padding, padding)))
+  OH = (x.shape[2] - kh) // stride + 1
+  OW = (x.shape[3] - kw) // stride + 1
+  # channels last so the reshape copies nothing: 2.95 GB peak vs 5.37 GB for NCHW (256ch 3x3, 512x512, M4)
+  x = x.transpose(0, 2, 3, 1)
+  patches = [x[:, y:y + stride * OH:stride, xx:xx + stride * OW:stride, :] for y in range(kh) for xx in range(kw)]
+  return xp.stack(patches, axis=-1).reshape(N * OH * OW, C * kh * kw)  # (N, OH, OW, C, kh*kw) -> rows
 
 
 def col2im(cols, shape, kh, kw, stride, padding):
-    """Inverse of im2col: add every patch row back onto the pixels it came from."""
-    N, C, H, W = shape
-    H_pad, W_pad = H + 2 * padding, W + 2 * padding
-    OH = (H_pad - kh) // stride + 1
-    OW = (W_pad - kw) // stride + 1
+  """Inverse of im2col: add every patch row back onto the pixels it came from."""
+  N, C, H, W = shape
+  H_pad, W_pad = H + 2 * padding, W + 2 * padding
+  OH = (H_pad - kh) // stride + 1
+  OW = (W_pad - kw) // stride + 1
 
-    cols = cols.reshape(N, OH, OW, C, kh, kw).transpose(0, 3, 4, 5, 1, 2)
-    img = np.zeros((N, C, H_pad, W_pad), dtype=cols.dtype)
-    for y in range(kh):
-        for xx in range(kw):
-            img[:, :, y:y + stride * OH:stride, xx:xx + stride * OW:stride] += cols[:, :, y, xx]
-    return img[:, :, padding:H_pad - padding, padding:W_pad - padding]
+  cols = cols.reshape(N, OH, OW, C, kh, kw).transpose(0, 3, 4, 5, 1, 2)
+  img = np.zeros((N, C, H_pad, W_pad), dtype=cols.dtype)
+  for y in range(kh):
+    for xx in range(kw):
+      img[:, :, y:y + stride * OH:stride, xx:xx + stride * OW:stride] += cols[:, :, y, xx]
+  return img[:, :, padding:H_pad - padding, padding:W_pad - padding]

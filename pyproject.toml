@@ -23,8 +23,12 @@ docs = [
     "mkdocstrings[python]",
 ]
 
+[tool.ruff]
+line-length = 150
+indent-width = 2
+
 [tool.ruff.lint]
-extend-select = ["TID251", "E701", "E702", "E703", "E731"]  # no code golf: one statement per line, no assigned lambdas
+extend-select = ["TID251", "E501", "E701", "E702", "E703", "E731"]  # 150 columns; no code golf: one statement per line, no assigned lambdas
 
 [dependency-groups]
 dev = [

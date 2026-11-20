@@ -8,19 +8,19 @@ from stackgrad.tensor import Tensor, where
 
 RAN = []
 for name, fn in inspect.getmembers(mlops, inspect.isclass):
-    if issubclass(fn, mlops.Function) and fn is not mlops.Function and "forward" in fn.__dict__:
-        def counted(self, *args, _forward=fn.forward, _name=name, **kwargs):
-            RAN.append(_name)
-            return _forward(self, *args, **kwargs)
-        fn.forward = counted
+  if issubclass(fn, mlops.Function) and fn is not mlops.Function and "forward" in fn.__dict__:
+    def counted(self, *args, _forward=fn.forward, _name=name, **kwargs):
+      RAN.append(_name)
+      return _forward(self, *args, **kwargs)
+    fn.forward = counted
 
 failures = 0
 
 
 def check(ok, what):
-    global failures
-    failures += not ok
-    print(f"[{'ok' if ok else 'FAIL'}]   {what}")
+  global failures
+  failures += not ok
+  print(f"[{'ok' if ok else 'FAIL'}]   {what}")
 
 
 rng = np.random.default_rng(0)
@@ -33,7 +33,7 @@ check(RAN == [] and c.shape == (64, 16) and c.dtype == np.float64 and c._buf is 
 
 
 def layer(x, w):
-    return (x @ w + 1.0).relu().sum(axis=0)
+  return (x @ w + 1.0).relu().sum(axis=0)
 
 
 out = layer(a, b)

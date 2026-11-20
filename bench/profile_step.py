@@ -14,41 +14,41 @@ RESULTS = Path(__file__).resolve().parent / "results"
 
 
 def main():
-    p = argparse.ArgumentParser()
-    p.add_argument("--device", default="metal", choices=["cpu", "metal", "cuda"])
-    p.add_argument("--batch", type=int, default=32)
-    args = p.parse_args()
+  p = argparse.ArgumentParser()
+  p.add_argument("--device", default="metal", choices=["cpu", "metal", "cuda"])
+  p.add_argument("--batch", type=int, default=32)
+  args = p.parse_args()
 
-    np.random.seed(0)
-    model = TransformerLM(10_000, 256, 512, 4, 16, 1344).to(args.device)
-    opt = AdamW(model.parameters(), lr=1e-3)
-    idx = np.random.randint(0, 10_000, (args.batch, 257))
+  np.random.seed(0)
+  model = TransformerLM(10_000, 256, 512, 4, 16, 1344).to(args.device)
+  opt = AdamW(model.parameters(), lr=1e-3)
+  idx = np.random.randint(0, 10_000, (args.batch, 257))
 
-    def step():
-        loss = cross_entropy_loss(model(idx[:, :-1]), idx[:, 1:])
-        opt.zero_grad()
-        loss.backward()
-        opt.step()
-        return loss.item()  # waits for the device
+  def step():
+    loss = cross_entropy_loss(model(idx[:, :-1]), idx[:, 1:])
+    opt.zero_grad()
+    loss.backward()
+    opt.step()
+    return loss.item()  # waits for the device
 
-    for _ in range(3):
-        step()
-    start = time.perf_counter()
-    for _ in range(5):
-        step()
-    step_ms = (time.perf_counter() - start) / 5 * 1000
+  for _ in range(3):
+    step()
+  start = time.perf_counter()
+  for _ in range(5):
+    step()
+  step_ms = (time.perf_counter() - start) / 5 * 1000
 
-    with profile() as prof:
-        loss = cross_entropy_loss(model(idx[:, :-1]), idx[:, 1:])
-        opt.zero_grad()
-        loss.backward()
-    rows = [{"op": op, "calls": calls, "ms": round(ms, 3)} for op, calls, ms in prof.rows()]
-    print(f"{args.device}: a step takes {step_ms:.1f} ms; forward + backward profiled op by op: {prof.wall_ms:.1f} ms")
-    print(prof.table())
-    result = {"device": args.device, "batch": args.batch, "context": 256, "step_ms": round(step_ms, 1),
-              "profiled_ms": round(prof.wall_ms, 1), "rows": rows}
-    (RESULTS / f"profile_{args.device}.json").write_text(json.dumps(result, indent=1))
+  with profile() as prof:
+    loss = cross_entropy_loss(model(idx[:, :-1]), idx[:, 1:])
+    opt.zero_grad()
+    loss.backward()
+  rows = [{"op": op, "calls": calls, "ms": round(ms, 3)} for op, calls, ms in prof.rows()]
+  print(f"{args.device}: a step takes {step_ms:.1f} ms; forward + backward profiled op by op: {prof.wall_ms:.1f} ms")
+  print(prof.table())
+  result = {"device": args.device, "batch": args.batch, "context": 256, "step_ms": round(step_ms, 1),
+            "profiled_ms": round(prof.wall_ms, 1), "rows": rows}
+  (RESULTS / f"profile_{args.device}.json").write_text(json.dumps(result, indent=1))
 
 
 if __name__ == "__main__":
-    main()
+  main()

@@ -11,27 +11,27 @@ CHANGES = {"abl_baseline": "none: pre-norm RMSNorm, RoPE, SwiGLU", "abl_no_rmsno
 
 
 def finite(x):
-    return x if x is not None and math.isfinite(x) else None
+  return x if x is not None and math.isfinite(x) else None
 
 
 def summarize(name):
-    rows = [json.loads(line) for line in (ROOT / "runs" / name / "metrics.jsonl").read_text().splitlines()]
-    config = json.loads((ROOT / "runs" / name / "config.json").read_text())
-    val = [(r["step"], r["val_loss"]) for r in rows if "val_loss" in r]
-    diverged = next((r["step"] for r in rows if not math.isfinite(r["loss"])), None)
-    return {"run": name, "change": CHANGES[name], "lr": config["lr"], "warmup": config["warmup"], "steps": rows[-1]["step"],
-            "final_val_loss": finite(val[-1][1]), "best_val_loss": min((v for _, v in val if math.isfinite(v)), default=None),
-            "diverged_at_step": diverged, "tokens_per_s": round(float(np.median([r["tokens_per_s"] for r in rows]))),
-            "val_curve": [[s, round(v, 4) if math.isfinite(v) else None] for s, v in val]}
+  rows = [json.loads(line) for line in (ROOT / "runs" / name / "metrics.jsonl").read_text().splitlines()]
+  config = json.loads((ROOT / "runs" / name / "config.json").read_text())
+  val = [(r["step"], r["val_loss"]) for r in rows if "val_loss" in r]
+  diverged = next((r["step"] for r in rows if not math.isfinite(r["loss"])), None)
+  return {"run": name, "change": CHANGES[name], "lr": config["lr"], "warmup": config["warmup"], "steps": rows[-1]["step"],
+          "final_val_loss": finite(val[-1][1]), "best_val_loss": min((v for _, v in val if math.isfinite(v)), default=None),
+          "diverged_at_step": diverged, "tokens_per_s": round(float(np.median([r["tokens_per_s"] for r in rows]))),
+          "val_curve": [[s, round(v, 4) if math.isfinite(v) else None] for s, v in val]}
 
 
 def main():
-    names = [n for n in CHANGES if (ROOT / "runs" / n / "metrics.jsonl").exists()]
-    rows = [summarize(n) for n in names]
-    (ROOT / "bench/results/ablations.json").write_text(json.dumps({"runs": rows}, indent=1))
-    for r in rows:
-        print(f"{r['run']:24s} val {r['final_val_loss']}  diverged at {r['diverged_at_step']}  {r['tokens_per_s']:,} tok/s")
+  names = [n for n in CHANGES if (ROOT / "runs" / n / "metrics.jsonl").exists()]
+  rows = [summarize(n) for n in names]
+  (ROOT / "bench/results/ablations.json").write_text(json.dumps({"runs": rows}, indent=1))
+  for r in rows:
+    print(f"{r['run']:24s} val {r['final_val_loss']}  diverged at {r['diverged_at_step']}  {r['tokens_per_s']:,} tok/s")
 
 
 if __name__ == "__main__":
-    main()
+  main()

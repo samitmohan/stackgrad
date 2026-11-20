@@ -176,20 +176,20 @@ _KERNELS = {
 
 
 def attention(q, k, v, version="v3"):
-    """Causal attention: q (B, H, T, D), k, v (B, Hkv, S, D) -> out (B, H, T, D), lse (B, H, T)."""
-    B, H, T, D = q.shape
-    assert k.shape[1] and H % k.shape[1] == 0 and D % 8 == 0 and D <= 128, (q.shape, k.shape)
-    bk = 32 if D <= 64 else 16  # keeps the K/V tiles within 32 KB of threadgroup memory
-    if version == "v1":
-        grid, group = (B * H * T, 1, 1), (min(256, B * H * T), 1, 1)
-    else:
-        threads = 32 if version == "v2" else 128
-        grid, group = (B * H * -(-T // 32) * threads, 1, 1), (threads, 1, 1)
-    return _KERNELS[version](
-        inputs=[q, k, v],
-        template=[("InT", q.dtype), ("D", D), ("BK", bk)],
-        grid=grid,
-        threadgroup=group,
-        output_shapes=[q.shape, (B, H, T)],
-        output_dtypes=[q.dtype, mx.float32],
-    )
+  """Causal attention: q (B, H, T, D), k, v (B, Hkv, S, D) -> out (B, H, T, D), lse (B, H, T)."""
+  B, H, T, D = q.shape
+  assert k.shape[1] and H % k.shape[1] == 0 and D % 8 == 0 and D <= 128, (q.shape, k.shape)
+  bk = 32 if D <= 64 else 16  # keeps the K/V tiles within 32 KB of threadgroup memory
+  if version == "v1":
+    grid, group = (B * H * T, 1, 1), (min(256, B * H * T), 1, 1)
+  else:
+    threads = 32 if version == "v2" else 128
+    grid, group = (B * H * -(-T // 32) * threads, 1, 1), (threads, 1, 1)
+  return _KERNELS[version](
+      inputs=[q, k, v],
+      template=[("InT", q.dtype), ("D", D), ("BK", bk)],
+      grid=grid,
+      threadgroup=group,
+      output_shapes=[q.shape, (B, H, T)],
+      output_dtypes=[q.dtype, mx.float32],
+  )

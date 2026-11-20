@@ -13,61 +13,61 @@ LAYERS, VOCAB, BATCH, CONTEXT = 4, 10_000, 32, 256
 
 
 def shape(d_model):
-    d_ff = round(8 / 3 * d_model / 64) * 64
-    return d_model // 32, d_ff, LAYERS * (4 * d_model ** 2 + 3 * d_model * d_ff) + VOCAB * d_model
+  d_ff = round(8 / 3 * d_model / 64) * 64
+  return d_model // 32, d_ff, LAYERS * (4 * d_model ** 2 + 3 * d_model * d_ff) + VOCAB * d_model
 
 
 CS336_RUN = 6 * shape(512)[2] * 327_680_000  # the story model of §5: its matmul parameters x its tokens x 6
 
 
 def run(device):
-    for budget in BUDGETS:
-        for d in D_MODELS:
-            heads, d_ff, n = shape(d)
-            steps = round(budget / (6 * n) / (BATCH * CONTEXT))
-            name = f"scaling/C{budget:.0e}_d{d}"
-            if (ROOT / "runs" / name / "metrics.jsonl").exists():
-                continue  # a finished or interrupted run keeps its place; delete it to retrain
-            print(f"{name}: {n / 1e6:.1f}M parameters, {steps:,} steps", flush=True)
-            subprocess.run([sys.executable, "train_gpt.py", "--run", name, "--device", device, "--d-model", str(d),
-                            "--heads", str(heads), "--d-ff", str(d_ff), "--layers", str(LAYERS), "--steps", str(steps),
-                            "--warmup", str(max(steps // 10, 1)), "--eval-every", str(steps), "--eval-batches", "50",
-                            "--sample-every", str(10 * steps)], cwd=ROOT, check=True)
+  for budget in BUDGETS:
+    for d in D_MODELS:
+      heads, d_ff, n = shape(d)
+      steps = round(budget / (6 * n) / (BATCH * CONTEXT))
+      name = f"scaling/C{budget:.0e}_d{d}"
+      if (ROOT / "runs" / name / "metrics.jsonl").exists():
+        continue  # a finished or interrupted run keeps its place; delete it to retrain
+      print(f"{name}: {n / 1e6:.1f}M parameters, {steps:,} steps", flush=True)
+      subprocess.run([sys.executable, "train_gpt.py", "--run", name, "--device", device, "--d-model", str(d),
+                      "--heads", str(heads), "--d-ff", str(d_ff), "--layers", str(LAYERS), "--steps", str(steps),
+                      "--warmup", str(max(steps // 10, 1)), "--eval-every", str(steps), "--eval-batches", "50",
+                      "--sample-every", str(10 * steps)], cwd=ROOT, check=True)
 
 
 def fit():
-    rows = []
-    for budget in BUDGETS:
-        for d in D_MODELS:
-            path = ROOT / "runs" / f"scaling/C{budget:.0e}_d{d}" / "metrics.jsonl"
-            evals = [r for r in map(json.loads, path.read_text().splitlines()) if "val_loss" in r] if path.exists() else []
-            if evals:
-                rows.append({"budget": budget, "d_model": d, "params": shape(d)[2], "val_loss": evals[-1]["val_loss"]})
-    optima = []
-    for budget in BUDGETS:
-        pts = [r for r in rows if r["budget"] == budget]
-        if len(pts) < 3:
-            continue
-        a, b, c = np.polyfit(np.log([r["params"] for r in pts]), [r["val_loss"] for r in pts], 2)
-        if a > 0:  # a parabola that opens upward has a bottom
-            optima.append({"budget": budget, "params": float(np.exp(-b / (2 * a))), "loss": float(c - b * b / (4 * a))})
-    result = {"budgets": BUDGETS, "runs": rows, "optima": optima}
-    if len(optima) >= 2:
-        slope, intercept = np.polyfit(np.log([o["budget"] for o in optima]), np.log([o["params"] for o in optima]), 1)
-        n_cs336 = float(np.exp(intercept) * CS336_RUN ** slope)
-        result |= {"exponent": float(slope), "coefficient": float(np.exp(intercept)), "cs336_budget": CS336_RUN,
-                   "cs336_params_predicted": n_cs336, "cs336_tokens_predicted": CS336_RUN / (6 * n_cs336)}
-    (ROOT / "bench/results/scaling.json").write_text(json.dumps(result, indent=1))
-    print(json.dumps({k: v for k, v in result.items() if k != "runs"}, indent=1))
+  rows = []
+  for budget in BUDGETS:
+    for d in D_MODELS:
+      path = ROOT / "runs" / f"scaling/C{budget:.0e}_d{d}" / "metrics.jsonl"
+      evals = [r for r in map(json.loads, path.read_text().splitlines()) if "val_loss" in r] if path.exists() else []
+      if evals:
+        rows.append({"budget": budget, "d_model": d, "params": shape(d)[2], "val_loss": evals[-1]["val_loss"]})
+  optima = []
+  for budget in BUDGETS:
+    pts = [r for r in rows if r["budget"] == budget]
+    if len(pts) < 3:
+      continue
+    a, b, c = np.polyfit(np.log([r["params"] for r in pts]), [r["val_loss"] for r in pts], 2)
+    if a > 0:  # a parabola that opens upward has a bottom
+      optima.append({"budget": budget, "params": float(np.exp(-b / (2 * a))), "loss": float(c - b * b / (4 * a))})
+  result = {"budgets": BUDGETS, "runs": rows, "optima": optima}
+  if len(optima) >= 2:
+    slope, intercept = np.polyfit(np.log([o["budget"] for o in optima]), np.log([o["params"] for o in optima]), 1)
+    n_cs336 = float(np.exp(intercept) * CS336_RUN ** slope)
+    result |= {"exponent": float(slope), "coefficient": float(np.exp(intercept)), "cs336_budget": CS336_RUN,
+               "cs336_params_predicted": n_cs336, "cs336_tokens_predicted": CS336_RUN / (6 * n_cs336)}
+  (ROOT / "bench/results/scaling.json").write_text(json.dumps(result, indent=1))
+  print(json.dumps({k: v for k, v in result.items() if k != "runs"}, indent=1))
 
 
 def main():
-    p = argparse.ArgumentParser()
-    p.add_argument("command", choices=["run", "fit"])
-    p.add_argument("--device", default="cuda")
-    args = p.parse_args()
-    run(args.device) if args.command == "run" else fit()
+  p = argparse.ArgumentParser()
+  p.add_argument("command", choices=["run", "fit"])
+  p.add_argument("--device", default="cuda")
+  args = p.parse_args()
+  run(args.device) if args.command == "run" else fit()
 
 
 if __name__ == "__main__":
-    main()
+  main()

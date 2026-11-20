@@ -13,67 +13,67 @@ PAT = re.compile(r"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}| 
 
 
 def config(path):
-    """TransformerLM arguments from a Hugging Face Qwen3 config.json."""
-    c = json.loads((Path(path) / "config.json").read_text())
-    return {"vocab_size": c["vocab_size"], "context_length": c["max_position_embeddings"], "d_model": c["hidden_size"],
-            "n_layers": c["num_hidden_layers"], "n_heads": c["num_attention_heads"], "d_ff": c["intermediate_size"],
-            "n_kv_heads": c["num_key_value_heads"], "rope_theta": c["rope_theta"], "head_dim": c["head_dim"],
-            "qk_norm": True, "norm_eps": c["rms_norm_eps"], "tie_embeddings": c["tie_word_embeddings"]}
+  """TransformerLM arguments from a Hugging Face Qwen3 config.json."""
+  c = json.loads((Path(path) / "config.json").read_text())
+  return {"vocab_size": c["vocab_size"], "context_length": c["max_position_embeddings"], "d_model": c["hidden_size"],
+          "n_layers": c["num_hidden_layers"], "n_heads": c["num_attention_heads"], "d_ff": c["intermediate_size"],
+          "n_kv_heads": c["num_key_value_heads"], "rope_theta": c["rope_theta"], "head_dim": c["head_dim"],
+          "qk_norm": True, "norm_eps": c["rms_norm_eps"], "tie_embeddings": c["tie_word_embeddings"]}
 
 
 def hf_names(n_layers):
-    """stackgrad name -> (HF tensor name, transpose?); HF Linear weights are (out, in), stackgrad's (in, out)."""
-    names = {"embed.weight": ("model.embed_tokens.weight", False), "norm.weight": ("model.norm.weight", False)}
-    for i in range(n_layers):
-        mine, hf = f"blocks.{i}.", f"model.layers.{i}."
-        names[mine + "attn_norm.weight"] = (hf + "input_layernorm.weight", False)
-        names[mine + "ffn_norm.weight"] = (hf + "post_attention_layernorm.weight", False)
-        for proj in ["q_proj", "k_proj", "v_proj", "o_proj"]:
-            names[f"{mine}attn.{proj}.weight"] = (f"{hf}self_attn.{proj}.weight", True)
-        names[mine + "attn.q_norm.weight"] = (hf + "self_attn.q_norm.weight", False)
-        names[mine + "attn.k_norm.weight"] = (hf + "self_attn.k_norm.weight", False)
-        for mine_ffn, hf_ffn in [("w1", "gate_proj"), ("w2", "down_proj"), ("w3", "up_proj")]:
-            names[f"{mine}ffn.{mine_ffn}.weight"] = (f"{hf}mlp.{hf_ffn}.weight", True)
-    return names
+  """stackgrad name -> (HF tensor name, transpose?); HF Linear weights are (out, in), stackgrad's (in, out)."""
+  names = {"embed.weight": ("model.embed_tokens.weight", False), "norm.weight": ("model.norm.weight", False)}
+  for i in range(n_layers):
+    mine, hf = f"blocks.{i}.", f"model.layers.{i}."
+    names[mine + "attn_norm.weight"] = (hf + "input_layernorm.weight", False)
+    names[mine + "ffn_norm.weight"] = (hf + "post_attention_layernorm.weight", False)
+    for proj in ["q_proj", "k_proj", "v_proj", "o_proj"]:
+      names[f"{mine}attn.{proj}.weight"] = (f"{hf}self_attn.{proj}.weight", True)
+    names[mine + "attn.q_norm.weight"] = (hf + "self_attn.q_norm.weight", False)
+    names[mine + "attn.k_norm.weight"] = (hf + "self_attn.k_norm.weight", False)
+    for mine_ffn, hf_ffn in [("w1", "gate_proj"), ("w2", "down_proj"), ("w3", "up_proj")]:
+      names[f"{mine}ffn.{mine_ffn}.weight"] = (f"{hf}mlp.{hf_ffn}.weight", True)
+  return names
 
 
 def load_qwen3(path, context_length=4096):
-    """TransformerLM from a Hugging Face Qwen3 directory (config.json and *.safetensors)."""
-    cfg = config(path) | {"context_length": context_length}
-    # shortcut: the checkpoint overwrites the random init (14.7 of a 19.6 s load); skip it if loads start to hurt
-    model = TransformerLM(**cfg)
-    params = dict(model.named_parameters())
-    names = hf_names(cfg["n_layers"])
-    # a skipped tensor would keep its random init
-    assert params.keys() == names.keys(), (sorted(params.keys() - names.keys())[:3], sorted(names.keys() - params.keys())[:3])
-    unplaced = {hf: (name, transpose) for name, (hf, transpose) in names.items()}
-    lm_head = None
-    # one tensor at a time: Qwen3-1.7B's float32 weights beside the init would take 16 GB
-    for shard in sorted(Path(path).glob("*.safetensors")):
-        for hf, w in iter_safetensors(shard):
-            hf = hf if hf.startswith(("model.", "lm_head.")) else "model." + hf  # Qwen3-Embedding saves its names without the prefix
-            if hf == "lm_head.weight" and cfg["tie_embeddings"]:
-                lm_head = w
-                continue
-            name, transpose = unplaced.pop(hf)  # a KeyError: the checkpoint has a tensor the mapping doesn't know
-            w = w.T if transpose else w
-            assert w.shape == params[name].shape, (name, w.shape, params[name].shape)
-            params[name].data = np.ascontiguousarray(w, dtype=np.float32)
-    assert not unplaced, f"the checkpoint lacks {sorted(unplaced)[:3]}"
-    if lm_head is not None:
-        assert np.array_equal(lm_head, params["embed.weight"].data), "lm_head differs from the tied embedding"
-    return model
+  """TransformerLM from a Hugging Face Qwen3 directory (config.json and *.safetensors)."""
+  cfg = config(path) | {"context_length": context_length}
+  # shortcut: the checkpoint overwrites the random init (14.7 of a 19.6 s load); skip it if loads start to hurt
+  model = TransformerLM(**cfg)
+  params = dict(model.named_parameters())
+  names = hf_names(cfg["n_layers"])
+  # a skipped tensor would keep its random init
+  assert params.keys() == names.keys(), (sorted(params.keys() - names.keys())[:3], sorted(names.keys() - params.keys())[:3])
+  unplaced = {hf: (name, transpose) for name, (hf, transpose) in names.items()}
+  lm_head = None
+  # one tensor at a time: Qwen3-1.7B's float32 weights beside the init would take 16 GB
+  for shard in sorted(Path(path).glob("*.safetensors")):
+    for hf, w in iter_safetensors(shard):
+      hf = hf if hf.startswith(("model.", "lm_head.")) else "model." + hf  # Qwen3-Embedding saves its names without the prefix
+      if hf == "lm_head.weight" and cfg["tie_embeddings"]:
+        lm_head = w
+        continue
+      name, transpose = unplaced.pop(hf)  # a KeyError: the checkpoint has a tensor the mapping doesn't know
+      w = w.T if transpose else w
+      assert w.shape == params[name].shape, (name, w.shape, params[name].shape)
+      params[name].data = np.ascontiguousarray(w, dtype=np.float32)
+  assert not unplaced, f"the checkpoint lacks {sorted(unplaced)[:3]}"
+  if lm_head is not None:
+    assert np.array_equal(lm_head, params["embed.weight"].data), "lm_head differs from the tied embedding"
+  return model
 
 
 def load_tokenizer(path):
-    """Qwen's vocab.json and merges.txt in stackgrad's BPE, with its special tokens at their own ids."""
-    added = json.loads((Path(path) / "tokenizer.json").read_text())["added_tokens"]
-    tok = Tokenizer.from_files(Path(path) / "vocab.json", Path(path) / "merges.txt", pattern=PAT, nfc=True)
-    tok = Tokenizer({**tok.vocab, **{a["id"]: a["content"].encode() for a in added}},
-                    [p for p, _ in sorted(tok.ranks.items(), key=lambda kv: kv[1])],
-                    [a["content"] for a in added], pattern=PAT, nfc=True)
-    assert all(tok.ids[a["content"].encode()] == a["id"] for a in added)
-    return tok
+  """Qwen's vocab.json and merges.txt in stackgrad's BPE, with its special tokens at their own ids."""
+  added = json.loads((Path(path) / "tokenizer.json").read_text())["added_tokens"]
+  tok = Tokenizer.from_files(Path(path) / "vocab.json", Path(path) / "merges.txt", pattern=PAT, nfc=True)
+  tok = Tokenizer({**tok.vocab, **{a["id"]: a["content"].encode() for a in added}},
+                  [p for p, _ in sorted(tok.ranks.items(), key=lambda kv: kv[1])],
+                  [a["content"] for a in added], pattern=PAT, nfc=True)
+  assert all(tok.ids[a["content"].encode()] == a["id"] for a in added)
+  return tok
 
 
 _TOOLS_HEADER = ("# Tools\n\nYou may call one or more functions to assist with the user query.\n\n"
@@ -84,21 +84,21 @@ _TOOLS_FOOTER = ("\n</tools>\n\nFor each function call, return a json object wit
 
 
 def chat_prompt(messages, think=False, tools=None):
-    """Qwen3's chat template: messages -> prompt text ending where the reply starts; think=False skips reasoning."""
-    # shortcut: earlier assistant turns keep their <think> text (HF strips it); strip it if agent chats run long
-    text = ""
-    if tools:
-        system = messages[0]["content"] + "\n\n" if messages[0]["role"] == "system" else ""
-        text = "<|im_start|>system\n" + system + _TOOLS_HEADER + "".join("\n" + json.dumps(t, ensure_ascii=False) for t in tools) + _TOOLS_FOOTER
-        messages = messages[1:] if system else messages
-    for i, m in enumerate(messages):
-        if m["role"] != "tool":
-            text += f"<|im_start|>{m['role']}\n{m['content']}<|im_end|>\n"
-            continue
-        # consecutive tool results share one user turn
-        if i == 0 or messages[i - 1]["role"] != "tool":
-            text += "<|im_start|>user"
-        text += f"\n<tool_response>\n{m['content']}\n</tool_response>"
-        if i == len(messages) - 1 or messages[i + 1]["role"] != "tool":
-            text += "<|im_end|>\n"
-    return text + "<|im_start|>assistant\n" + ("" if think else "<think>\n\n</think>\n\n")
+  """Qwen3's chat template: messages -> prompt text ending where the reply starts; think=False skips reasoning."""
+  # shortcut: earlier assistant turns keep their <think> text (HF strips it); strip it if agent chats run long
+  text = ""
+  if tools:
+    system = messages[0]["content"] + "\n\n" if messages[0]["role"] == "system" else ""
+    text = "<|im_start|>system\n" + system + _TOOLS_HEADER + "".join("\n" + json.dumps(t, ensure_ascii=False) for t in tools) + _TOOLS_FOOTER
+    messages = messages[1:] if system else messages
+  for i, m in enumerate(messages):
+    if m["role"] != "tool":
+      text += f"<|im_start|>{m['role']}\n{m['content']}<|im_end|>\n"
+      continue
+    # consecutive tool results share one user turn
+    if i == 0 or messages[i - 1]["role"] != "tool":
+      text += "<|im_start|>user"
+    text += f"\n<tool_response>\n{m['content']}\n</tool_response>"
+    if i == len(messages) - 1 or messages[i + 1]["role"] != "tool":
+      text += "<|im_end|>\n"
+  return text + "<|im_start|>assistant\n" + ("" if think else "<think>\n\n</think>\n\n")

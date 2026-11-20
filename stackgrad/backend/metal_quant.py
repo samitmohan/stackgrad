@@ -33,12 +33,12 @@ _KERNEL = mx.fast.metal_kernel(name="stackgrad_quant_matmul", input_names=["x", 
 
 
 def quant_matmul(x, packed, scales, biases, bits, group):
-    M, N = x.shape[0], packed.shape[0]
-    return _KERNEL(
-        inputs=[x, packed, scales, biases],
-        template=[("InT", x.dtype), ("BITS", bits), ("GROUP", group), ("SG", SIMDGROUPS)],
-        grid=(-(-N // SIMDGROUPS) * SIMDGROUPS * 32, 1, 1),
-        threadgroup=(SIMDGROUPS * 32, 1, 1),
-        output_shapes=[(M, N)],
-        output_dtypes=[x.dtype],
-    )[0]
+  M, N = x.shape[0], packed.shape[0]
+  return _KERNEL(
+      inputs=[x, packed, scales, biases],
+      template=[("InT", x.dtype), ("BITS", bits), ("GROUP", group), ("SG", SIMDGROUPS)],
+      grid=(-(-N // SIMDGROUPS) * SIMDGROUPS * 32, 1, 1),
+      threadgroup=(SIMDGROUPS * 32, 1, 1),
+      output_shapes=[(M, N)],
+      output_dtypes=[x.dtype],
+  )[0]

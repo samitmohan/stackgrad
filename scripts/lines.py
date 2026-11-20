@@ -22,26 +22,26 @@ PACKAGE = ["engine", "backends and kernels", "models", "serving"]
 
 
 def code_lines(path):
-    comment = "//" if path.suffix in (".ts", ".tsx") else "#"
-    return sum(1 for line in path.read_text().splitlines() if line.strip() and not line.strip().startswith(comment))
+  comment = "//" if path.suffix in (".ts", ".tsx") else "#"
+  return sum(1 for line in path.read_text().splitlines() if line.strip() and not line.strip().startswith(comment))
 
 
 def main():
-    groups = [{"name": name, "files": len(files), "lines": sum(code_lines(f) for f in files)} for name, files in GROUPS.items()]
-    covered = {f for files in GROUPS.values() for f in files}
-    missing = [str(p.relative_to(ROOT)) for p in PKG.rglob("*.py") if p not in covered]
-    assert not missing, f"package files in no group: {missing}"  # a new module must be counted somewhere
-    by_name = {g["name"]: g["lines"] for g in groups}
-    result = {"groups": groups, "package": sum(by_name[n] for n in PACKAGE), "repository": sum(by_name.values())}
-    for g in groups:
-        print(f"{g['name']:36s} {g['files']:3d} files {g['lines']:6,d} lines")
-    print(f"{'stackgrad package':36s} {result['package']:16,d} lines\n{'whole repository':36s} {result['repository']:16,d} lines")
-    if "--max" in sys.argv:  # CI: check the budget, leave lines.json (the post's number) alone
-        budget = int(sys.argv[sys.argv.index("--max") + 1])
-        assert result["package"] <= budget, f"stackgrad/ is {result['package']} lines, over its budget of {budget}"
-        return
-    (ROOT / "bench/results/lines.json").write_text(json.dumps(result, indent=1))
+  groups = [{"name": name, "files": len(files), "lines": sum(code_lines(f) for f in files)} for name, files in GROUPS.items()]
+  covered = {f for files in GROUPS.values() for f in files}
+  missing = [str(p.relative_to(ROOT)) for p in PKG.rglob("*.py") if p not in covered]
+  assert not missing, f"package files in no group: {missing}"  # a new module must be counted somewhere
+  by_name = {g["name"]: g["lines"] for g in groups}
+  result = {"groups": groups, "package": sum(by_name[n] for n in PACKAGE), "repository": sum(by_name.values())}
+  for g in groups:
+    print(f"{g['name']:36s} {g['files']:3d} files {g['lines']:6,d} lines")
+  print(f"{'stackgrad package':36s} {result['package']:16,d} lines\n{'whole repository':36s} {result['repository']:16,d} lines")
+  if "--max" in sys.argv:  # CI: check the budget, leave lines.json (the post's number) alone
+    budget = int(sys.argv[sys.argv.index("--max") + 1])
+    assert result["package"] <= budget, f"stackgrad/ is {result['package']} lines, over its budget of {budget}"
+    return
+  (ROOT / "bench/results/lines.json").write_text(json.dumps(result, indent=1))
 
 
 if __name__ == "__main__":
-    main()
+  main()

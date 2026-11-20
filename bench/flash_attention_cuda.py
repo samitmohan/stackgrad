@@ -21,41 +21,41 @@ COMPOSED = SimpleNamespace(**{name: getattr(cuda, name) for name in cuda.__all__
 
 
 def forward(xp, parents, dout):
-    ctx = mlops.Attention(xp, *parents)
-    return ctx, ctx.forward(*(t.data for t in parents))
+  ctx = mlops.Attention(xp, *parents)
+  return ctx, ctx.forward(*(t.data for t in parents))
 
 
 def forward_backward(xp, parents, dout):
-    ctx, _ = forward(xp, parents, dout)
-    return ctx.backward(dout)
+  ctx, _ = forward(xp, parents, dout)
+  return ctx.backward(dout)
 
 
 def per_call(fn, *args):
+  fn(*args)
+  cp.cuda.Device().synchronize()
+  times = []
+  while sum(times) < 0.5 or len(times) < 3:
+    start = time.perf_counter()
     fn(*args)
     cp.cuda.Device().synchronize()
-    times = []
-    while sum(times) < 0.5 or len(times) < 3:
-        start = time.perf_counter()
-        fn(*args)
-        cp.cuda.Device().synchronize()
-        times.append(time.perf_counter() - start)
-    return float(np.median(times)) * 1000
+    times.append(time.perf_counter() - start)
+  return float(np.median(times)) * 1000
 
 
 def main():
-    rows = []
-    for name, B, H, Hkv, T, S, D in SHAPES:
-        rng = np.random.default_rng(0)
-        q, k, v, dout = (cp.asarray(rng.standard_normal(s), cp.float32) for s in [(B, H, T, D), (B, Hkv, S, D), (B, Hkv, S, D), (B, H, T, D)])
-        parents = [Tensor(a, requires_grad=True, device="cuda") for a in (q, k, v)]
-        for impl, xp in (("composed", COMPOSED), ("Triton", cuda)):
-            rows.append({"shape": name, "B": B, "H": H, "Hkv": Hkv, "T": T, "S": S, "D": D, "impl": impl,
-                         "forward_ms": round(per_call(forward, xp, parents, dout), 3),
-                         "forward_backward_ms": round(per_call(forward_backward, xp, parents, dout), 3)})
-            print(rows[-1], flush=True)
-    result = {"device": cp.cuda.runtime.getDeviceProperties(0)["name"].decode(), "dtype": "float32 (TF32 matmuls)", "rows": rows}
-    (RESULTS / "flash_attention_cuda.json").write_text(json.dumps(result, indent=1))
+  rows = []
+  for name, B, H, Hkv, T, S, D in SHAPES:
+    rng = np.random.default_rng(0)
+    q, k, v, dout = (cp.asarray(rng.standard_normal(s), cp.float32) for s in [(B, H, T, D), (B, Hkv, S, D), (B, Hkv, S, D), (B, H, T, D)])
+    parents = [Tensor(a, requires_grad=True, device="cuda") for a in (q, k, v)]
+    for impl, xp in (("composed", COMPOSED), ("Triton", cuda)):
+      rows.append({"shape": name, "B": B, "H": H, "Hkv": Hkv, "T": T, "S": S, "D": D, "impl": impl,
+                   "forward_ms": round(per_call(forward, xp, parents, dout), 3),
+                   "forward_backward_ms": round(per_call(forward_backward, xp, parents, dout), 3)})
+      print(rows[-1], flush=True)
+  result = {"device": cp.cuda.runtime.getDeviceProperties(0)["name"].decode(), "dtype": "float32 (TF32 matmuls)", "rows": rows}
+  (RESULTS / "flash_attention_cuda.json").write_text(json.dumps(result, indent=1))
 
 
 if __name__ == "__main__":
-    main()
+  main()

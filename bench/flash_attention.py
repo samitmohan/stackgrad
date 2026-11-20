@@ -20,11 +20,11 @@ SHAPES = [  # name, B, H, Hkv, T, S, D
 
 
 def materialized(q, k, v):
-    _, H, T, D = q.shape
-    S, rep = k.shape[2], H // k.shape[1]
-    k, v = mx.repeat(k, rep, axis=1), mx.repeat(v, rep, axis=1)
-    s = (q * D ** -0.5) @ k.swapaxes(-1, -2) + mx.triu(mx.full((T, S), -mx.inf), k=S - T + 1)
-    return mx.softmax(s, axis=-1) @ v
+  _, H, T, D = q.shape
+  S, rep = k.shape[2], H // k.shape[1]
+  k, v = mx.repeat(k, rep, axis=1), mx.repeat(v, rep, axis=1)
+  s = (q * D ** -0.5) @ k.swapaxes(-1, -2) + mx.triu(mx.full((T, S), -mx.inf), k=S - T + 1)
+  return mx.softmax(s, axis=-1) @ v
 
 
 IMPLS = {
@@ -37,40 +37,40 @@ IMPLS = {
 
 
 def per_call(fn, q, k, v, calls=10):
-    """Queues `calls` launches per sync to amortize the ~140 us sync."""
-    mx.eval(fn(q, k, v))
-    times = []
-    while sum(times) < 0.5 or len(times) < 3:
-        t0 = time.perf_counter()
-        mx.eval([fn(q, k, v) for _ in range(calls)])
-        times.append((time.perf_counter() - t0) / calls)
-    return float(np.median(times))
+  """Queues `calls` launches per sync to amortize the ~140 us sync."""
+  mx.eval(fn(q, k, v))
+  times = []
+  while sum(times) < 0.5 or len(times) < 3:
+    t0 = time.perf_counter()
+    mx.eval([fn(q, k, v) for _ in range(calls)])
+    times.append((time.perf_counter() - t0) / calls)
+  return float(np.median(times))
 
 
 def main():
-    rows = []
-    for name, B, H, Hkv, T, S, D in SHAPES:
-        visible = T * (S - T) + T * (T + 1) // 2  # (query, key) pairs the causal mask lets through
-        for dtype in [mx.float32, mx.bfloat16]:
-            rng = np.random.default_rng(0)
-            q, k, v = (mx.array(rng.standard_normal(s).astype(np.float32)).astype(dtype)
-                       for s in [(B, H, T, D), (B, Hkv, S, D), (B, Hkv, S, D)])
-            oracle = IMPLS["mx.fast.sdpa (oracle)"](q, k, v).astype(mx.float32)
-            nbytes = (2 * B * H * T * D + 2 * B * Hkv * S * D) * q.itemsize
-            for impl, fn in IMPLS.items():
-                s = per_call(fn, q, k, v)
-                err = mx.abs(fn(q, k, v).astype(mx.float32) - oracle).max().item()
-                rows.append({"shape": name, "B": B, "H": H, "Hkv": Hkv, "T": T, "S": S, "D": D,
-                             "dtype": str(dtype).split(".")[-1], "impl": impl, "ms": round(s * 1e3, 4),
-                             "tflops": round(4 * B * H * D * visible / s / 1e12, 3),
-                             "gb_s": round(nbytes / s / 1e9, 1), "max_err_vs_oracle": float(f"{err:.2e}")})
-                r = rows[-1]
-                print(f"{name:17s} {r['dtype']:8s} {impl:22s} {r['ms']:9.3f} ms {r['tflops']:7.3f} TFLOP/s "
-                      f"{r['gb_s']:7.1f} GB/s  err {err:.1e}")
-    chip = subprocess.run(["sysctl", "-n", "machdep.cpu.brand_string"], check=False, capture_output=True, text=True).stdout.strip()
-    out = {"device": f"{chip} GPU", "mlx": mx.__version__, "rows": rows}
-    (RESULTS / "flash_attention.json").write_text(json.dumps(out, indent=1))
+  rows = []
+  for name, B, H, Hkv, T, S, D in SHAPES:
+    visible = T * (S - T) + T * (T + 1) // 2  # (query, key) pairs the causal mask lets through
+    for dtype in [mx.float32, mx.bfloat16]:
+      rng = np.random.default_rng(0)
+      q, k, v = (mx.array(rng.standard_normal(s).astype(np.float32)).astype(dtype)
+                 for s in [(B, H, T, D), (B, Hkv, S, D), (B, Hkv, S, D)])
+      oracle = IMPLS["mx.fast.sdpa (oracle)"](q, k, v).astype(mx.float32)
+      nbytes = (2 * B * H * T * D + 2 * B * Hkv * S * D) * q.itemsize
+      for impl, fn in IMPLS.items():
+        s = per_call(fn, q, k, v)
+        err = mx.abs(fn(q, k, v).astype(mx.float32) - oracle).max().item()
+        rows.append({"shape": name, "B": B, "H": H, "Hkv": Hkv, "T": T, "S": S, "D": D,
+                     "dtype": str(dtype).split(".")[-1], "impl": impl, "ms": round(s * 1e3, 4),
+                     "tflops": round(4 * B * H * D * visible / s / 1e12, 3),
+                     "gb_s": round(nbytes / s / 1e9, 1), "max_err_vs_oracle": float(f"{err:.2e}")})
+        r = rows[-1]
+        print(f"{name:17s} {r['dtype']:8s} {impl:22s} {r['ms']:9.3f} ms {r['tflops']:7.3f} TFLOP/s "
+              f"{r['gb_s']:7.1f} GB/s  err {err:.1e}")
+  chip = subprocess.run(["sysctl", "-n", "machdep.cpu.brand_string"], check=False, capture_output=True, text=True).stdout.strip()
+  out = {"device": f"{chip} GPU", "mlx": mx.__version__, "rows": rows}
+  (RESULTS / "flash_attention.json").write_text(json.dumps(out, indent=1))
 
 
 if __name__ == "__main__":
-    main()
+  main()
