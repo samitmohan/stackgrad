@@ -35,8 +35,7 @@ data/
 runs/
 *.safetensors
 *.tsbuildinfo
-drafts/karpathy/*.html
-!drafts/karpathy/template.html
+drafts/
 
 # AI assistant files: kept locally, not published
 CLAUDE.md
