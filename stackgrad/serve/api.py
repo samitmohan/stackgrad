@@ -1,5 +1,4 @@
 import ast
-import asyncio
 import json
 import operator
 import sys
@@ -13,7 +12,6 @@ from typing import Annotated, Literal
 import numpy as np
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from stackgrad import Tensor, TransformerLM, no_grad
@@ -21,7 +19,6 @@ from stackgrad.tokenizer import Tokenizer
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNS = ROOT / "runs"
-IDLE_S = 120
 MAX_PROMPT_CHARS = 64_000  # past what a 4k-token context holds
 EOT = "<|endoftext|>"
 app = FastAPI(title="stackgrad")
@@ -34,56 +31,6 @@ def _run_dir(name):
   if path.parent != RUNS.resolve() or not (path / "metrics.jsonl").exists():
     raise HTTPException(404, f"no run named {name!r}")
   return path
-
-
-def _parse(line):
-  # a diverged run logs NaN, which python's json writes but strict JSON rejects: it becomes null
-  return json.loads(line, parse_constant=lambda _: None)
-
-
-def _read_jsonl(path):
-  return [_parse(line) for line in path.open()] if path.exists() else []
-
-
-@app.get("/api/runs")
-def runs():
-  out = []
-  for d in sorted(RUNS.glob("*/metrics.jsonl")):
-    rows = _read_jsonl(d)
-    out.append({"name": d.parent.name, "config": json.loads((d.parent / "config.json").read_text()),
-                "steps": len(rows), "last": rows[-1] if rows else None,
-                "has_checkpoint": (d.parent / "ckpt.npz").exists()})
-  return out
-
-
-@app.get("/api/runs/{name}/samples")
-def samples(name: str):
-  return _read_jsonl(_run_dir(name) / "samples.jsonl")
-
-
-@app.get("/api/runs/{name}/stream")
-async def stream(name: str, offset: int = 0):
-  """Server-sent events: every metrics line from byte `offset` on, as the training script appends them."""
-  path = _run_dir(name) / "metrics.jsonl"
-
-  async def lines():
-    pos = offset
-    while True:
-      with path.open() as f:
-        f.seek(pos)
-        chunk = f.read()
-      # a partial line waits for its newline
-      end = chunk.rfind("\n") + 1
-      for line in chunk[:end].splitlines():
-        yield f"data: {json.dumps(_parse(line))}\n\n"
-      pos += len(chunk[:end].encode())
-      # end idle streams, or finished runs hold the browser's 6 connections per host (GRPO writes every ~47 s)
-      if time.time() - path.stat().st_mtime > IDLE_S:
-        yield "event: end\ndata: {}\n\n"
-        return
-      await asyncio.sleep(1.0)
-
-  return StreamingResponse(lines(), media_type="text/event-stream")
 
 
 BINOPS = {ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul, ast.Div: operator.truediv,
@@ -424,13 +371,3 @@ def agent(req: AskRequest):
     return _complete(messages, 320, tools=TOOLS)
   reply, trace = solve(ask, req.question)
   return {"reply": reply, "answer": final_number(reply), "trace": trace}
-
-
-@app.get("/api/bench")
-def bench():
-  return {p.stem: json.loads(p.read_text()) for p in sorted((ROOT / "bench" / "results").glob("*.json"))}
-
-
-app.mount("/results", StaticFiles(directory=ROOT / "bench" / "results"), name="results")
-if (ROOT / "ui" / "dist").exists():
-  app.mount("/", StaticFiles(directory=ROOT / "ui" / "dist", html=True), name="ui")

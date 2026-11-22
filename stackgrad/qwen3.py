@@ -5,6 +5,7 @@ import numpy as np
 import regex as re
 
 from .gpt import TransformerLM
+from .layers import SKIP_INIT
 from .state import iter_safetensors
 from .tokenizer import Tokenizer
 
@@ -40,8 +41,11 @@ def hf_names(n_layers):
 def load_qwen3(path, context_length=4096):
   """TransformerLM from a Hugging Face Qwen3 directory (config.json and *.safetensors)."""
   cfg = config(path) | {"context_length": context_length}
-  # shortcut: the checkpoint overwrites the random init (14.7 of a 19.6 s load); skip it if loads start to hurt
-  model = TransformerLM(**cfg)
+  SKIP_INIT.on = True  # the checkpoint overwrites every weight (asserted below), so the random init was 14.7 s of a 19.6 s load
+  try:
+    model = TransformerLM(**cfg)
+  finally:
+    SKIP_INIT.on = False
   params = dict(model.named_parameters())
   names = hf_names(cfg["n_layers"])
   # a skipped tensor would keep its random init

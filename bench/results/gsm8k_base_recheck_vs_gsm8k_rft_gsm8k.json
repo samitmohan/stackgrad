@@ -1,0 +1,8 @@
+{
+ "first": "gsm8k_base_recheck",
+ "second": "gsm8k_rft_gsm8k",
+ "n": 250,
+ "fixed": 18,
+ "broke": 15,
+ "p_value": 0.7283
+}

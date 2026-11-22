@@ -115,23 +115,9 @@ def main():
   failed += [] if ok else ["engine failure"]
 
   # imported here, not at the top: the API module pulls in FastAPI
-  import os
-  import tempfile
-
   from fastapi.testclient import TestClient
 
   from stackgrad.serve import api
-  from stackgrad.serve.api import _parse
-  with tempfile.TemporaryDirectory() as tmp:
-    api.RUNS = Path(tmp)
-    (Path(tmp) / "done").mkdir()
-    (Path(tmp) / "done" / "metrics.jsonl").write_text('{"step": 1, "loss": 2.5}\n{"step": 2, "loss": NaN}\n')
-    os.utime(Path(tmp) / "done" / "metrics.jsonl", (0, 0))  # last written in 1970: a finished run
-    body = TestClient(api.app).get("/api/runs/done/stream").text  # returns only if the server ends the stream
-  ok = body.count('data: {"step"') == 2 and '"loss": null' in body and body.rstrip().endswith("event: end\ndata: {}")
-  print(f"[{'ok' if ok else 'FAIL'}]   api: a finished run's stream sends its history, then ends instead of holding the connection")
-  failed += [] if ok else ["api stream end"]
-
   r = TestClient(api.app).post("/api/graph", json={"expr": "log(x)", "variables": {"x": -1.0}})
   ok = r.status_code == 200 and None in [n.get("value") for n in r.json()["nodes"]]
   print(f"[{'ok' if ok else 'FAIL'}]   api: log(-1) in the graph explorer comes back as null, not a server error")
@@ -152,9 +138,6 @@ def main():
   ok = frozen == 0
   print(f"[{'ok' if ok else 'FAIL'}]   no_grad in one thread leaves a model built in another trainable ({frozen} frozen)")
   failed += [] if ok else ["thread-local no_grad"]
-  ok = _parse('{"step": 626, "loss": NaN, "grad_norm": Infinity}') == {"step": 626, "loss": None, "grad_norm": None}
-  print(f"[{'ok' if ok else 'FAIL'}]   api: a diverged run's NaN metrics reach the browser as null, not as invalid JSON")
-  failed += [] if ok else ["api NaN"]
 
   out = Path(__file__).resolve().parent.parent / "bench" / "results" / f"serve_{device}.json"
   out.write_text(json.dumps({"device": device, "block_size": 4, "scenarios": results, "failed": failed}, indent=1))

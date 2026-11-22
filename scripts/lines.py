@@ -5,7 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 PKG = ROOT / "stackgrad"
 GROUPS = {
-    "engine": [PKG / f for f in ["__init__.py", "tensor.py", "mlops.py", "module.py", "layers.py", "functional.py", "loss.py",
+    "engine": [PKG / f for f in ["__init__.py", "__main__.py", "tensor.py", "mlops.py", "module.py", "layers.py", "functional.py", "loss.py",
                                  "optim.py", "conv.py", "data.py", "grad_check.py", "checkpoint.py", "profile.py"]],
     "backends and kernels": sorted((PKG / "backend").glob("*.py")),
     "models": [PKG / f for f in ["attention.py", "gpt.py", "qwen3.py", "tokenizer.py", "state.py", "lora.py", "quant.py",
@@ -16,7 +16,6 @@ GROUPS = {
     "examples (GPT-2, Stable Diffusion)": sorted((ROOT / "examples").glob("*.py")),
     "tests": [ROOT / "test_grads.py", *sorted((ROOT / "tests").glob("*.py"))],
     "benchmarks and scripts": [*sorted((ROOT / "bench").glob("*.py")), *sorted((ROOT / "scripts").glob("*.py"))],
-    "the post (TypeScript)": sorted(p for p in (ROOT / "ui" / "src").rglob("*") if p.suffix in (".ts", ".tsx")),
 }
 PACKAGE = ["engine", "backends and kernels", "models", "serving"]
 

@@ -2,55 +2,50 @@
  "groups": [
   {
    "name": "engine",
-   "files": 13,
-   "lines": 1364
+   "files": 14,
+   "lines": 1252
   },
   {
    "name": "backends and kernels",
    "files": 7,
-   "lines": 658
+   "lines": 566
   },
   {
    "name": "models",
    "files": 9,
-   "lines": 734
+   "lines": 665
   },
   {
    "name": "serving",
    "files": 5,
-   "lines": 594
+   "lines": 494
   },
   {
    "name": "apps (RAG, agent)",
    "files": 2,
-   "lines": 243
+   "lines": 205
   },
   {
    "name": "training scripts",
    "files": 3,
-   "lines": 363
+   "lines": 315
   },
   {
    "name": "examples (GPT-2, Stable Diffusion)",
    "files": 2,
-   "lines": 537
+   "lines": 480
   },
   {
    "name": "tests",
    "files": 17,
-   "lines": 1697
+   "lines": 1634
   },
   {
    "name": "benchmarks and scripts",
-   "files": 22,
-   "lines": 1704
-  },
-  {
-   "name": "the post (TypeScript)",
    "files": 25,
-   "lines": 3051
+   "lines": 1667
   }
  ],
- "package": 3350,
- "repository": 10945
+ "package": 2977,
+ "repository": 7278
 }

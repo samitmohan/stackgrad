@@ -1,0 +1,15 @@
+{
+ "name": "rft_gsm8k",
+ "adapter": "runs/rft_gsm8k/adapter.npz",
+ "n": 250,
+ "correct": 155,
+ "accuracy": 0.62,
+ "device": "metal",
+ "dtype": "bfloat16",
+ "max_new": 320,
+ "prompt": "{question}\nSolve it step by step, then give the final answer on its own line as: #### <number>",
+ "new_tokens": 52013,
+ "seconds": 1929.8,
+ "tokens_per_s": 27.0,
+ "hit_token_limit": 37
+}

@@ -52,11 +52,11 @@ def speculative_generate(target, draft, ids, max_new, k=4, temperature=0.0, eos_
       last = _draw(np.maximum(p[n] - qs[n], 0.0)) if n < k else _draw(p[k])
       proposed, accepted = proposed + k, accepted + n
 
-      # roll both caches back to the kept tokens: the target saw every draft, the draft all but the last
+      # roll both caches back to the kept tokens (the target saw every draft, the draft all but the last); later writes overwrite the rest
       for c in t_caches:
-        c.truncate(len(c) - (k - n))
+        c.n -= k - n
       for c in d_caches:
-        c.truncate(len(c) - (k - 1 - min(n, k - 1)))
+        c.n -= k - 1 - min(n, k - 1)
       pending_t = [last]
       pending_d = ([drafts[-1]] if n == k else []) + [last]
 

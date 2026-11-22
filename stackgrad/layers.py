@@ -1,9 +1,17 @@
+import threading
+
 import numpy as np
 
 from . import functional as F
 from . import tensor as T
 from .module import Module
 from .tensor import Tensor
+
+SKIP_INIT = threading.local()  # set while building a model whose every weight a checkpoint will overwrite
+
+
+def normal(shape, std):  # float32 N(0, std^2), or uninitialized memory while SKIP_INIT.on is set
+  return np.empty(shape, np.float32) if getattr(SKIP_INIT, "on", False) else (np.random.randn(*shape) * std).astype(np.float32)
 
 
 class Linear(Module):
@@ -15,14 +23,8 @@ class Linear(Module):
       scale = np.sqrt(2.0 / (in_features + out_features))
     else:
       scale = np.sqrt(2.0 / in_features)
-    self.weight = Tensor(
-        (np.random.randn(in_features, out_features) * scale).astype(np.float32),
-        requires_grad=True
-    )
-    self.bias = Tensor(
-        np.zeros(out_features, dtype=np.float32),
-        requires_grad=True
-    ) if bias else None
+    self.weight = Tensor(normal((in_features, out_features), scale), requires_grad=True)
+    self.bias = Tensor(np.zeros(out_features, np.float32), requires_grad=True) if bias else None
 
   def forward(self, x):
     assert x.shape[-1] == self.weight.shape[0], f"Linear expects last dim {self.weight.shape[0]}, got {x.shape[-1]}"
@@ -112,10 +114,7 @@ class Embedding(Module):
   def __init__(self, num_embeddings, embed_dim):
     super().__init__()
     assert num_embeddings > 0 and embed_dim > 0, "sizes must be positive"
-    self.weight = Tensor(
-        (np.random.randn(num_embeddings, embed_dim) * 0.02).astype(np.float32),
-        requires_grad=True
-    )
+    self.weight = Tensor(normal((num_embeddings, embed_dim), 0.02), requires_grad=True)
 
   def forward(self, idx):
     return self.weight[np.asarray(idx)]

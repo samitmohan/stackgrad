@@ -30,7 +30,7 @@ class Attention(Module):
     q, k, v = (qkv[:, :, i].transpose(1, 2) for i in range(3))  # each (B, heads, T, head width)
     if cache is not None:
       k, v = cache.update(k, v)
-    out = scaled_dot_product_attention(q, k, v)
+    out = scaled_dot_product_attention(q, k, v, n=None if cache is None else cache.n)
     return self.c_proj(out.transpose(1, 2).reshape(B, T, C))
 
 
@@ -66,7 +66,7 @@ class GPT2(Module):
     self.ln_f = LayerNorm(d, eps)
 
   def forward(self, idx, caches=None):
-    start = 0 if caches is None else len(caches[0])
+    start = 0 if caches is None else caches[0].n
     x = self.wte(idx) + self.wpe(np.arange(start, start + idx.shape[1]))
     for i, block in enumerate(self.h):
       x = block(x, None if caches is None else caches[i])

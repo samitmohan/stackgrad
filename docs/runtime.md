@@ -24,9 +24,10 @@ place.
 
 ## The attention contract
 
-Every attention kernel takes `q (B, H, T, D)` and `k, v (B, Hkv, S, D)` and returns `out (B, H, T, D)` and
-`lse (B, H, T)`. Query row `i` sits at absolute position `S - T + i` and sees keys `0 .. S - T + i`, so one kernel
-serves training (`T == S`) and decoding against a KV cache (`T < S`). Query head `h` reads KV head `h // (H / Hkv)`,
+Every attention kernel takes `q (B, H, T, D)`, `k, v (B, Hkv, S, D)` and `n`, the keys written so far, and returns
+`out (B, H, T, D)` and `lse (B, H, T)`. `n` is `S` except in a KV cache's fixed-size buffers, whose slots from `n` on
+hold nothing yet. Query row `i` sits at absolute position `n - T + i` and sees keys `0 .. n - T + i`, so one kernel
+serves training (`T == S`) and decoding against a KV cache (`T < n`). Query head `h` reads KV head `h // (H / Hkv)`,
 which is grouped-query attention without copying K and V. The scale is `1/sqrt(D)`. `lse` is each row's log-sum-exp
 of scores, all the backward pass needs to rebuild the softmax. No kernel writes the `(T, S)` score matrix to memory.
 

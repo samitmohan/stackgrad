@@ -15,7 +15,6 @@ train_*.py        TinyStories pretraining, LoRA, GRPO
 examples/         GPT-2 and Stable Diffusion v1.5, one file each
 tests/            each piece against its reference: PyTorch, transformers, diffusers, finite differences
 bench/ scripts/   the measurements; results land in bench/results/
-ui/               the write-up with live figures (React), served by serve/api.py
 ```
 
 ## Adding a primitive
@@ -43,11 +42,12 @@ CI runs these on every push, and fails when the `stackgrad/` package grows past 
 
 ## Reproducing the write-up
 
-The post with live figures needs the UI built and the server up:
+The post lives at [samitmohan.in/blog/minitorch](https://samitmohan.in/blog/minitorch). Its live figures replay requests
+recorded from the server:
 
 ```sh
-cd ui && npm install && npm run build && cd ..
-uv run uvicorn stackgrad.serve.api:app --port 8000   # http://localhost:8000
+uv run uvicorn stackgrad.serve.api:app --port 8000
+uv run python scripts/record_replays.py        # into bench/replays/
 ```
 
 Each command writes the file its result is read from (`bench/results/`, `runs/`).

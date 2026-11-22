@@ -4,14 +4,23 @@ build-backend = "hatchling.build"
 
 [project]
 name = "stackgrad"
-version = "0.2.0"
+version = "0.3.0"
 description = "A deep learning framework written from scratch, up to a served Qwen3 with retrieval and a tool-using agent"
 authors = [{name = "Samit Mohan"}]
+readme = "README.md"
+license = "MIT"
 requires-python = ">=3.10"
 dependencies = [
     "numpy",
     "regex",
 ]
+
+[project.scripts]
+stackgrad = "stackgrad.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/samitmohan/stackgrad"
+Documentation = "https://samitmohan.github.io/stackgrad/"
 
 [project.optional-dependencies]
 metal = ["mlx"]
@@ -21,6 +30,9 @@ docs = [
     "mkdocs-material",
     "mkdocstrings[python]",
 ]
+
+[tool.hatch.build.targets.sdist]
+include = ["stackgrad", "README.md", "LICENSE"]
 
 [tool.ruff]
 line-length = 150

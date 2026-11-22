@@ -21,7 +21,7 @@ from cupy import (
 )
 
 from . import cpu, cuda_attention
-from .cpu import dtype, is_float, realize
+from .cpu import dtype, fuse, is_float, realize  # shortcut: fuse runs each op on its own, try cupy.fuse or CUDA graphs on bqa3
 
 __all__ = [
     "asarray",
@@ -35,6 +35,7 @@ __all__ = [
     "expand_dims",
     "float32",
     "full",
+    "fuse",
     "fused_attention",
     "fused_attention_backward",
     "im2col",
@@ -67,9 +68,9 @@ def to_numpy(x):
   return cp.asnumpy(x)
 
 
-def fused_attention(q, k, v):
-  """Triton FlashAttention forward, or None for shapes the kernels don't cover."""
-  return cuda_attention.attention(q, k, v) if cuda_attention.supported(q) else None
+def fused_attention(q, k, v, n):
+  """Triton FlashAttention forward over the first n keys, or None for shapes the kernels don't cover."""
+  return cuda_attention.attention(q, k[:, :, :n], v[:, :, :n]) if cuda_attention.supported(q) else None
 
 
 def fused_attention_backward(q, k, v, out, lse, grad):

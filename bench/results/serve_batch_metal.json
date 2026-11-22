@@ -18,61 +18,61 @@
   {
    "mode": "one forward per sequence",
    "concurrent": 1,
-   "seconds": 5.539,
-   "tokens_per_s": 23.1,
-   "decode_step_ms": 42.93
+   "seconds": 2.003,
+   "tokens_per_s": 63.9,
+   "decode_step_ms": 15.15
   },
   {
    "mode": "one forward per step",
    "concurrent": 1,
-   "seconds": 5.674,
-   "tokens_per_s": 22.6,
-   "decode_step_ms": 44.37,
+   "seconds": 1.999,
+   "tokens_per_s": 64.0,
+   "decode_step_ms": 15.09,
    "identical_replies": 1
   },
   {
    "mode": "one forward per sequence",
    "concurrent": 2,
-   "seconds": 11.395,
-   "tokens_per_s": 22.5,
-   "decode_step_ms": 87.16
+   "seconds": 3.951,
+   "tokens_per_s": 64.8,
+   "decode_step_ms": 29.95
   },
   {
    "mode": "one forward per step",
    "concurrent": 2,
-   "seconds": 5.257,
-   "tokens_per_s": 48.7,
-   "decode_step_ms": 38.11,
+   "seconds": 4.883,
+   "tokens_per_s": 52.4,
+   "decode_step_ms": 37.42,
    "identical_replies": 0
   },
   {
    "mode": "one forward per sequence",
    "concurrent": 4,
-   "seconds": 21.766,
-   "tokens_per_s": 23.5,
-   "decode_step_ms": 170.64
+   "seconds": 7.971,
+   "tokens_per_s": 64.2,
+   "decode_step_ms": 60.26
   },
   {
    "mode": "one forward per step",
    "concurrent": 4,
-   "seconds": 6.033,
-   "tokens_per_s": 84.9,
-   "decode_step_ms": 43.7,
+   "seconds": 5.319,
+   "tokens_per_s": 96.3,
+   "decode_step_ms": 39.83,
    "identical_replies": 2
   },
   {
    "mode": "one forward per sequence",
    "concurrent": 8,
-   "seconds": 47.794,
-   "tokens_per_s": 21.4,
-   "decode_step_ms": 360.23
+   "seconds": 16.164,
+   "tokens_per_s": 63.4,
+   "decode_step_ms": 121.63
   },
   {
    "mode": "one forward per step",
    "concurrent": 8,
-   "seconds": 7.972,
-   "tokens_per_s": 128.4,
-   "decode_step_ms": 58.34,
+   "seconds": 6.611,
+   "tokens_per_s": 154.9,
+   "decode_step_ms": 47.87,
    "identical_replies": 4
   }
  ],

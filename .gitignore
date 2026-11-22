@@ -34,7 +34,6 @@ Thumbs.db
 data/
 runs/
 *.safetensors
-*.tsbuildinfo
 drafts/
 
 # AI assistant files: kept locally, not published

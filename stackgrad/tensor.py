@@ -1,3 +1,4 @@
+import functools
 import math
 import threading
 
@@ -59,9 +60,11 @@ def _apply(fn, *parents, **kwargs):
   xp = backend.get(device)
   ctx = fn(xp, *parents)
   dtype = ctx.out_dtype(*[p.dtype for p in parents], **kwargs)
-  out = Tensor._recorded((ctx, kwargs, [p if p._buf is None else p._buf for p in parents]),
-                         tuple(ctx.out_shape(*[tuple(p.shape) for p in parents], **kwargs)),
-                         dtype if xp.is_float(dtype) else xp.float32, device)  # Tensor() makes ints and bools float32
+  out = Tensor.__new__(Tensor)
+  out._buf, out._lazy = None, (ctx, kwargs, [p if p._buf is None else p._buf for p in parents])
+  out._shape = tuple(ctx.out_shape(*[tuple(p.shape) for p in parents], **kwargs))
+  out._dtype = dtype if xp.is_float(dtype) else xp.float32  # Tensor() makes ints and bools float32
+  out.device, out.requires_grad, out.grad, out._ctx = device, False, None, None
   if grad_enabled() and fn.differentiable and any(ctx.needs_grad):
     out.requires_grad = True
     out._ctx = ctx
@@ -75,6 +78,52 @@ def _broadcast(tensors, shape=()):
           for t in tensors]
 
 
+_FUSABLE = {mlops.Recip, mlops.Exp, mlops.Log, mlops.Sigmoid, mlops.Pow, mlops.Cast, mlops.Add, mlops.Mul, mlops.Where, mlops.Less,
+            mlops.Expand, mlops.Reshape}
+
+
+def _fusable(node):
+  # an autograd record keeps its forward's arrays for backward, which a compiled trace can't hand back; the profiler times each op;
+  # below 2^16 elements (a decode step's 8 x 1024) there's no memory traffic to save, and the fused call's Python costs more
+  return node._ctx is None and _profiler is None and type(node._lazy[0]) in _FUSABLE and math.prod(node._shape) >= 1 << 16
+
+
+def _store(node, out):
+  if out.dtype != node._dtype:
+    out = _to_array(out, node.device)  # ints and bools become float32, as in Tensor()
+  # later ops were built on the recorded shape and dtype
+  assert tuple(out.shape) == node._shape and out.dtype == node._dtype, \
+      f"{type(node._lazy[0]).__name__} recorded {node._shape} {node._dtype} but computed {tuple(out.shape)} {out.dtype}"
+  node.data = out  # drops _lazy, so inputs nothing else holds can be freed
+
+
+# runs 2+ fusable nodes as one call of the fused function for their structure, and stores only `outs`
+def _realize_fused(run, outs):
+  index = {node: k for k, node in enumerate(run)}
+  ext, ops = [], []
+  for node in run:
+    ctx, kwargs, inputs = node._lazy
+    refs = tuple(index.get(x) if isinstance(x, Tensor) else None for x in inputs)  # None: an input from outside the run
+    ext += [x._buf if isinstance(x, Tensor) else x for x, r in zip(inputs, refs) if r is None]
+    ops.append((type(ctx), tuple(kwargs.items()), refs, node._dtype))
+  for node, out in zip(outs, _fused(run[0].device, tuple(ops), tuple(index[node] for node in outs))(*ext)):
+    _store(node, out)
+
+
+# cached by structure, so a decode step that rebuilds the same graph reuses one function, which mx.compile traces once per shape
+@functools.lru_cache(maxsize=1024)
+def _fused(device, ops, outs):
+  xp = backend.get(device)
+
+  def run(*ext):
+    ext, vals = iter(ext), []
+    for fn, kwargs, refs, dtype in ops:
+      out = fn(xp).forward(*[next(ext) if r is None else vals[r] for r in refs], **dict(kwargs))
+      vals.append(out if out.dtype == dtype else _to_array(out, device))
+    return [vals[k] for k in outs]
+  return xp.fuse(run)
+
+
 class Tensor:
   """An n-dimensional array on a device ("cpu", "metal", "cuda") that records its ops for reverse-mode autodiff."""
   __array_ufunc__ = None  # makes np.float32(2) * t call t.__rmul__, not build an object array that drops the graph
@@ -85,14 +134,6 @@ class Tensor:
     self.requires_grad = requires_grad and grad_enabled()
     self.grad = None
     self._ctx = None
-
-  @classmethod
-  def _recorded(cls, lazy, shape, dtype, device):
-    """`lazy` is (ctx, kwargs, inputs)."""
-    out = cls.__new__(cls)
-    out._buf, out._lazy, out._shape, out._dtype = None, lazy, shape, dtype
-    out.device, out.requires_grad, out.grad, out._ctx = device, False, None, None
-    return out
 
   @property
   def data(self):
@@ -106,7 +147,7 @@ class Tensor:
     self._buf, self._lazy = array, None
 
   def realize(self):
-    """Computes this tensor by running every recorded op it depends on, once each. Returns self."""
+    """Computes this tensor by running every recorded op it depends on once, elementwise chains as one fused call. Returns self."""
     order, seen, stack = [], set(), [(self, False)]
     while stack:  # iterative, so a deep graph cannot hit the recursion limit
       node, inputs_done = stack.pop()
@@ -116,19 +157,30 @@ class Tensor:
         seen.add(node)
         stack.append((node, True))
         stack.extend((x, False) for x in node._lazy[2] if isinstance(x, Tensor))
+    runs, run_of = [], {}  # consecutive fusable nodes share a run
     for node in order:
+      if not (runs and _fusable(node) and _fusable(runs[-1][-1])):
+        runs.append([])
+      runs[-1].append(node)
+      run_of[node] = len(runs)
+    # a run returns only what the caller or a later run reads; the rest keep _lazy, so reading one later recomputes it
+    needed = {id(self)}
+    for node in order:
+      needed.update(id(x) for x in node._lazy[2] if isinstance(x, Tensor) and run_of.get(x) != run_of[node])
+    del order, seen, run_of  # holding the graph here kept every intermediate buffer alive until realize returned
+    for i, run in enumerate(runs):
+      runs[i] = None  # a buffer goes as soon as its last reader has run and dropped its _lazy
+      if len(run) > 1:
+        _realize_fused(run, [node for node in run if id(node) in needed])
+        continue
+      node = run[0]
       ctx, kwargs, inputs = node._lazy
       args = [x._buf if isinstance(x, Tensor) else x for x in inputs]
       if _profiler is None:
         out = ctx.forward(*args, **kwargs)
       else:
         out = _profiler.time(type(ctx).__name__, node.device, ctx.forward, *args, **kwargs)
-      if out.dtype != node._dtype:
-        out = _to_array(out, node.device)  # ints and bools become float32, as in Tensor()
-      # later ops were built on the recorded shape and dtype
-      assert tuple(out.shape) == node._shape and out.dtype == node._dtype, \
-          f"{type(ctx).__name__} recorded {node._shape} {node._dtype} but computed {tuple(out.shape)} {out.dtype}"
-      node.data = out  # drops _lazy, so inputs nothing else holds can be freed
+      _store(node, out)
     return self
 
   @property
@@ -291,24 +343,18 @@ class Tensor:
   def backward(self, keep_grads=False):
     """Backpropagate from this scalar, filling `.grad` on every leaf (and intermediates if `keep_grads`)."""
     assert self.data.size == 1, "backward() only works on scalar tensors - call .sum() or .mean() first"
+    assert self.requires_grad, "nothing this tensor depends on has requires_grad=True, so backward() has no gradients to compute"
 
     # iterative, so a deep graph cannot hit the recursion limit
-    topo = []
-    visited = set()
-    stack = [(self, False)]
+    topo, visited, stack = [], set(), [(self, False)]
     while stack:
       node, processed = stack.pop()
       if processed:
         topo.append(node)
-        continue
-      if node in visited:
-        continue
-      visited.add(node)
-      stack.append((node, True))
-      if node._ctx:
-        for parent in node._ctx.parents:
-          if parent.requires_grad and parent not in visited:
-            stack.append((parent, False))
+      elif node not in visited:
+        visited.add(node)
+        stack.append((node, True))
+        stack.extend((p, False) for p in (node._ctx.parents if node._ctx else ()) if p.requires_grad)
 
     self.grad = backend.get(self.device).ones_like(self.data)
     for node in reversed(topo):

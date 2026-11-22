@@ -1,0 +1,57 @@
+{
+ "model": "Qwen3-0.6B",
+ "dtype": "bfloat16",
+ "steps": 32,
+ "reps": 3,
+ "decode_one_chat": {
+  "switch": "capture",
+  "off_ms": [
+   25.37,
+   25.65,
+   25.49
+  ],
+  "on_ms": [
+   11.88,
+   11.89,
+   11.85
+  ],
+  "median_off_ms": 25.49,
+  "median_on_ms": 11.88,
+  "speedup": 2.15,
+  "max_output_gap": 0.0
+ },
+ "prefill_512": {
+  "switch": "fusion",
+  "off_ms": [
+   219.69,
+   215.3,
+   216.98
+  ],
+  "on_ms": [
+   212.63,
+   214.12,
+   213.24
+  ],
+  "median_off_ms": 216.98,
+  "median_on_ms": 213.24,
+  "speedup": 1.02,
+  "max_output_gap": 0.0
+ },
+ "decode_8_padded": {
+  "switch": "fusion",
+  "off_ms": [
+   36.82,
+   37.29,
+   36.59
+  ],
+  "on_ms": [
+   36.93,
+   36.56,
+   36.55
+  ],
+  "median_off_ms": 36.82,
+  "median_on_ms": 36.56,
+  "speedup": 1.01,
+  "max_output_gap": 0.0
+ }
+}

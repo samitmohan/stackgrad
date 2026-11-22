@@ -21,6 +21,7 @@ from stackgrad import (
     Sequential,
     Tensor,
     TransformerLM,
+    backend,
     clip_grad_norm,
     cross_entropy_loss,
     no_grad,
@@ -130,9 +131,18 @@ def check_decode(device, steps=4):
       caches = [KVCache() for _ in m.blocks]
       logits[d] = [m(prompt, caches).numpy()] + [m(tok, caches).numpy() for tok in new]
   gap = max(float(np.abs(a - b).max()) for a, b in zip(logits[device], logits["cpu"]))
-  print(f"KV-cache decode, prefill + {steps} steps: largest logit gap {gap:.2e}")
-  RESULTS["decode"] = {"steps": steps, "max_logit_gap": gap}
-  return [] if gap <= ATOL * 10 else ["decode"]
+  # again with capture off: a step replayed from a compiled trace must match the eager one (bit for bit in bfloat16; float32
+  # differs by a few ulp, as mx.compile's fused kernels round differently)
+  xp = backend.get(device)
+  capture, xp.capture = getattr(xp, "capture", None), None
+  with no_grad():
+    caches = [KVCache() for _ in models[device].blocks]
+    eager = [models[device](prompt, caches).numpy()] + [models[device](tok, caches).numpy() for tok in new]
+  xp.capture = capture
+  captured_gap = max(float(np.abs(a - b).max()) for a, b in zip(eager, logits[device]))
+  print(f"KV-cache decode, prefill + {steps} steps: largest logit gap {gap:.2e}; captured vs eager steps {captured_gap:.2e}")
+  RESULTS["decode"] = {"steps": steps, "max_logit_gap": gap, "captured_vs_eager_gap": captured_gap}
+  return [] if gap <= ATOL * 10 and captured_gap <= 1e-5 else ["decode"]
 
 
 def check_bfloat16(device):
@@ -183,13 +193,13 @@ def check_kernels():
     # reference: mlops.Attention's own math on cpu in float64; requires_grad keeps its log-sum-exp
     ref = scaled_dot_product_attention(*(Tensor(a, requires_grad=True) for a in (q, k, v)))
     ref_out, ref_lse = ref.data, ref._ctx.saved[4]
-    for version in ["v1", "v2", "v3"]:
+    for version in ["v1", "v3"]:
       out, lse = metal_attention.attention(*(mx.array(a.astype(np.float32)) for a in (q, k, v)), version)
       err = max(float(np.abs(np.array(out) - ref_out).max()), float(np.abs(np.array(lse) - ref_lse).max()))
       if err > ATOL:
         failed.append(f"{version} B{B} H{H}/{Hkv} T{T} S{S} D{D}: {err:.1e}")
-  print(f"attention kernels: {15 - len(failed)}/15 version x shape runs within {ATOL} of float64 {failed or ''}")
-  RESULTS["kernels"] = {"within_tolerance": 15 - len(failed), "total": 15, "tolerance": ATOL}
+  print(f"attention kernels: {10 - len(failed)}/10 version x shape runs within {ATOL} of float64 {failed or ''}")
+  RESULTS["kernels"] = {"within_tolerance": 10 - len(failed), "total": 10, "tolerance": ATOL}
   return ["kernels"] if failed else []
 
 

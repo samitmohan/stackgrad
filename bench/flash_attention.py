@@ -29,8 +29,7 @@ def materialized(q, k, v):
 
 IMPLS = {
     "materialized scores": materialized,
-    "v1 thread per row": lambda q, k, v: attention(q, k, v, "v1")[0],
-    "v2 threadgroup tiles": lambda q, k, v: attention(q, k, v, "v2")[0],
+    "v1 threadgroup per row": lambda q, k, v: attention(q, k, v, "v1")[0],
     "v3 simdgroup matmul": lambda q, k, v: attention(q, k, v, "v3")[0],
     "mx.fast.sdpa (oracle)": lambda q, k, v: mx.fast.scaled_dot_product_attention(q, k, v, scale=q.shape[-1] ** -0.5, mask="causal"),
 }

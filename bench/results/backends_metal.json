@@ -13,7 +13,8 @@
  },
  "decode": {
   "steps": 4,
-  "max_logit_gap": 1.6987323760986328e-06
+  "max_logit_gap": 1.430511474609375e-06,
+  "captured_vs_eager_gap": 1.0728836059570312e-06
  },
  "thread": {
   "ok": true
@@ -31,8 +32,8 @@
   "cast_grad_float32": true
  },
  "kernels": {
-  "within_tolerance": 15,
-  "total": 15,
+  "within_tolerance": 10,
+  "total": 10,
   "tolerance": 0.0001
  }
 }

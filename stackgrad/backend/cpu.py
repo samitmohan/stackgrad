@@ -31,6 +31,7 @@ __all__ = [
     "expand_dims",
     "float32",
     "full",
+    "fuse",
     "im2col",
     "inf",
     "is_float",
@@ -73,6 +74,11 @@ def realize(*arrays):
 
 def clear_cache():
   """NumPy keeps no memory pool to free."""
+
+
+def fuse(fn):
+  """NumPy runs each op as it is called, so there is nothing to fuse."""
+  return fn
 
 
 def sigmoid(x):

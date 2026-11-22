@@ -7,19 +7,19 @@
   {
    "method": "Qwen3-1.7B alone",
    "k": 0,
-   "tokens_per_s": 17.45,
+   "tokens_per_s": 26.53,
    "speedup": 1.0
   },
   {
    "method": "Qwen3-0.6B alone",
    "k": 0,
-   "tokens_per_s": 28.69,
-   "speedup": 1.644
+   "tokens_per_s": 63.7,
+   "speedup": 2.401
   },
   {
    "method": "speculative",
    "k": 1,
-   "tokens_per_s": 18.64,
+   "tokens_per_s": 21.93,
    "acceptance": 0.797,
    "first_diff_from_target": [
     null,
@@ -27,12 +27,12 @@
     null,
     null
    ],
-   "speedup": 1.068
+   "speedup": 0.827
   },
   {
    "method": "speculative",
    "k": 2,
-   "tokens_per_s": 17.58,
+   "tokens_per_s": 24.66,
    "acceptance": 0.711,
    "first_diff_from_target": [
     null,
@@ -40,12 +40,12 @@
     null,
     null
    ],
-   "speedup": 1.007
+   "speedup": 0.93
   },
   {
    "method": "speculative",
    "k": 3,
-   "tokens_per_s": 15.47,
+   "tokens_per_s": 25.55,
    "acceptance": 0.646,
    "first_diff_from_target": [
     null,
@@ -53,12 +53,12 @@
     null,
     null
    ],
-   "speedup": 0.887
+   "speedup": 0.963
   },
   {
    "method": "speculative",
    "k": 4,
-   "tokens_per_s": 15.94,
+   "tokens_per_s": 25.82,
    "acceptance": 0.595,
    "first_diff_from_target": [
     null,
@@ -66,12 +66,12 @@
     null,
     null
    ],
-   "speedup": 0.913
+   "speedup": 0.973
   },
   {
    "method": "speculative",
    "k": 6,
-   "tokens_per_s": 14.25,
+   "tokens_per_s": 24.77,
    "acceptance": 0.517,
    "first_diff_from_target": [
     null,
@@ -79,7 +79,7 @@
     null,
     null
    ],
-   "speedup": 0.817
+   "speedup": 0.934
   }
  ]
 }

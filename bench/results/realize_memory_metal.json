@@ -1,0 +1,12 @@
+{
+ "model": "Qwen3-0.6B",
+ "device": "metal",
+ "dtype": "float32",
+ "rows": 16,
+ "tokens": 96,
+ "max_output_gap": 0.0,
+ "peak_gb_above_start": {
+  "free_as_you_go": 3.71,
+  "hold_until_return": 3.71
+ }
+}

@@ -8,7 +8,9 @@ nav:
   - index.md
   - Quickstart: quickstart.md
   - Showcase: showcase.md
-  - Study plan: guide.md
+  - Study plan:
+    - guide.md
+    - Interview prep: interview.md
   - API Reference:
     - Tensor:
       - tensor/index.md
@@ -31,6 +33,9 @@ markdown_extensions:
     pygments_lang_class: true
 - pymdownx.inlinehilite
 - pymdownx.superfences
+- pymdownx.details
+- pymdownx.tasklist:
+    custom_checkbox: true
 - toc:
     permalink: "¤"
 

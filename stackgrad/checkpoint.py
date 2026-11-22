@@ -19,7 +19,9 @@ class _Checkpoint(Function):
     with T.autocast(self.cast):  # forward's precision: backward usually runs outside autocast
       out = self.fn(*leaves)
     # backward of sum(out * grad) pushes grad through fn; weights inside fn collect .grad here
-    (out * T.Tensor(grad, device=device)).sum().backward()
+    loss = (out * T.Tensor(grad, device=device)).sum()
+    if loss.requires_grad:  # a fully frozen fn has nothing to send a gradient to
+      loss.backward()
     # realize now, so this block's activations free before the next block recomputes
     weights = self.fn.parameters() if hasattr(self.fn, "parameters") else []
     self.xp.realize(*[t.grad for t in leaves + list(weights) if t.grad is not None])

@@ -21,11 +21,13 @@ from mlx.core import (
     zeros_like,
 )
 
+from ..tensor import Tensor
 from . import cpu, metal_attention, metal_quant
 
 __all__ = [
     "asarray",
     "broadcast_to",
+    "capture",
     "clear_cache",
     "col2im",
     "concatenate",
@@ -35,6 +37,7 @@ __all__ = [
     "expand_dims",
     "float32",
     "full",
+    "fuse",
     "fused_attention",
     "im2col",
     "inf",
@@ -52,6 +55,7 @@ __all__ = [
     "to_numpy",
     "triu",
     "where",
+    "write",
     "zeros_like",
 ]
 
@@ -77,6 +81,14 @@ def is_float(dt):
 
 realize = mx.eval
 clear_cache = mx.clear_cache  # mlx keeps freed buffers cached for reuse until this
+mx.set_cache_limit(1 << 30)  # freed buffers mlx keeps for reuse: 8-chat serving held 2.4 GB of them uncapped, 1.1 GB capped, same speed
+fuse = mx.compile  # traces fn once per input shape and fuses its elementwise ops into shared kernels
+
+
+# fn takes and returns Tensors; mx.compile runs its Python once per input shape, and later calls replay one fused graph
+def capture(fn):
+  traced = mx.compile(lambda *xs: [t.data for t in fn(*(Tensor(x, device="metal") for x in xs))])
+  return lambda *ts: [Tensor(y, device="metal") for y in traced(*(t.data for t in ts))]
 
 
 def scatter_add(shape, key, values):
@@ -92,13 +104,18 @@ def col2im(cols, *args):
   return mx.array(cpu.col2im(to_numpy(cols), *args))
 
 
-def fused_attention(q, k, v):
-  """Metal attention forward, or None for shapes the kernels don't cover."""
+def write(buf, x, pos):
+  """buf with x written along axis 2 from pos (an int, or an array inside a compiled trace), in place when nothing else holds buf."""
+  return mx.slice_update(buf, x, asarray(pos).astype(mx.int32).reshape(1), axes=(2,))
+
+
+def fused_attention(q, k, v, n):
+  """Metal attention forward over the first n keys, or None for shapes the kernels don't cover."""
   D = q.shape[-1]
   if D % 8 or D > 128:
     return None
   # one query row (decode) leaves v3's 32-row threadgroups mostly idle; v1 measured faster there
-  return metal_attention.attention(q, k, v, "v1" if q.shape[2] == 1 else "v3")
+  return metal_attention.attention(q, k, v, "v1" if q.shape[2] == 1 else "v3", asarray(n).reshape(1))
 
 
 def quant_matmul(x, packed, scales, biases, bits, group):

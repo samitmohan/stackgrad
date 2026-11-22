@@ -1,73 +1,35 @@
 import mlx.core as mx
 
 _SHAPES = """
-    const int T = q_shape[2], S = k_shape[2], H = q_shape[1], Hkv = k_shape[1];
+    const int T = q_shape[2], S = int(n[0]), H = q_shape[1], Hkv = k_shape[1];  // S: keys written, of the k_shape[2] k holds
     const float scale = rsqrt(float(D));
 """
 
+# v1: a threadgroup per query row; lane t scores key j0 + t of each tile, then every lane runs the tile's softmax in key order,
+# keeping output dim t, so the sums run in the same order as a single thread's would
 _V1 = _SHAPES + """
-    const uint row = thread_position_in_grid.x;            // over B * H * T query rows
-    if (row >= uint(q_shape[0] * H * T)) return;
-    const int i = row % T, bh = row / T, b = bh / H, h = bh % H;
-    const int kv = (b * Hkv + h / (H / Hkv)) * S * D;
+    const int row = threadgroup_position_in_grid.x, t = thread_position_in_threadgroup.x;
+    const int i = row % T, bh = row / T, b = bh / H, h = bh % H, last = S - T + i;  // this row sees keys 0 .. last
+    const int kv = (b * Hkv + h / (H / Hkv)) * k_shape[2] * D;
 
-    float qr[D], acc[D];
-    for (int d = 0; d < D; d++) { qr[d] = float(q[row * D + d]) * scale; acc[d] = 0.0f; }
-    float m = -INFINITY, l = 0.0f;
-    for (int j = 0; j <= S - T + i; j++) {
-        float s = 0.0f;
-        for (int d = 0; d < D; d++) s += qr[d] * float(k[kv + j * D + d]);
-        const float m_new = max(m, s), corr = exp(m - m_new), p = exp(s - m_new);
-        l = l * corr + p;
-        for (int d = 0; d < D; d++) acc[d] = acc[d] * corr + p * float(v[kv + j * D + d]);
-        m = m_new;
-    }
-    for (int d = 0; d < D; d++) out[row * D + d] = InT(acc[d] / l);
-    lse[row] = m + log(l);
-"""
-
-_V2 = _SHAPES + """
-    constexpr int BQ = 32;                                  // query rows (= threads) per threadgroup
-    threadgroup float Ks[BK * D], Vs[BK * D];
-    const int tid = thread_position_in_threadgroup.x;
-    const int n_qblocks = (T + BQ - 1) / BQ;
-    const int bh = threadgroup_position_in_grid.x / n_qblocks, qb = threadgroup_position_in_grid.x % n_qblocks;
-    const int b = bh / H, h = bh % H, kv = (b * Hkv + h / (H / Hkv)) * S * D;
-    const int i = qb * BQ + tid, last = S - T + i;          // this row sees keys 0 .. last
-    const int group_last = min(S - T + qb * BQ + BQ - 1, S - 1);
-
-    float qr[D], acc[D];
-    for (int d = 0; d < D; d++) { qr[d] = i < T ? float(q[(bh * T + i) * D + d]) * scale : 0.0f; acc[d] = 0.0f; }
-    float m = -INFINITY, l = 0.0f;
-    for (int j0 = 0; j0 <= group_last; j0 += BK) {
-        for (int e = tid; e < BK * D; e += BQ) {           // the 32 threads load the tile together
-            const bool in = j0 + e / D < S;
-            Ks[e] = in ? float(k[kv + j0 * D + e]) : 0.0f;
-            Vs[e] = in ? float(v[kv + j0 * D + e]) : 0.0f;
-        }
+    threadgroup float qr[D], sc[D];
+    qr[t] = float(q[row * D + t]) * scale;
+    float acc = 0.0f, m = -INFINITY, l = 0.0f;
+    for (int j0 = 0; j0 <= last; j0 += D) {
         threadgroup_barrier(mem_flags::mem_threadgroup);
-        float s[BK], m_tile = -INFINITY;
-        for (int jj = 0; jj < BK; jj++) {
-            float dot = 0.0f;
-            for (int d = 0; d < D; d++) dot += qr[d] * Ks[jj * D + d];
-            s[jj] = j0 + jj <= last ? dot : -INFINITY;
-            m_tile = max(m_tile, s[jj]);
+        float s = 0.0f;
+        for (int e = 0; e < D && j0 + t <= last; e++) s += qr[e] * float(k[kv + (j0 + t) * D + e]);
+        sc[t] = s;
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+        for (int j = j0; j <= min(last, j0 + D - 1); j++) {
+            const float m_new = max(m, sc[j - j0]), corr = exp(m - m_new), p = exp(sc[j - j0] - m_new);
+            l = l * corr + p;
+            acc = acc * corr + p * float(v[kv + j * D + t]);
+            m = m_new;
         }
-        const float m_new = max(m, m_tile), corr = exp(m - m_new);
-        l *= corr;
-        for (int d = 0; d < D; d++) acc[d] *= corr;
-        for (int jj = 0; jj < BK; jj++) {
-            const float p = exp(s[jj] - m_new);
-            l += p;
-            for (int d = 0; d < D; d++) acc[d] += p * Vs[jj * D + d];
-        }
-        m = m_new;
-        threadgroup_barrier(mem_flags::mem_threadgroup);  // everyone is done with this tile
     }
-    if (i < T) {
-        for (int d = 0; d < D; d++) out[(bh * T + i) * D + d] = InT(acc[d] / l);
-        lse[bh * T + i] = m + log(l);
-    }
+    out[row * D + t] = InT(acc / l);
+    if (t == 0) lse[row] = m + log(l);
 """
 
 # v3: 4 simdgroups x 8 query rows; lanes 4r..4r+3 share softmax row r, a quarter of the columns each
@@ -81,7 +43,7 @@ _V3 = _SHAPES + """
     const int tid = thread_index_in_threadgroup, sg = simdgroup_index_in_threadgroup, lane = thread_index_in_simdgroup;
     const int n_qblocks = (T + BQ - 1) / BQ;
     const int bh = threadgroup_position_in_grid.x / n_qblocks, qb = threadgroup_position_in_grid.x % n_qblocks;
-    const int b = bh / H, h = bh % H, kv = (b * Hkv + h / (H / Hkv)) * S * D;
+    const int b = bh / H, h = bh % H, kv = (b * Hkv + h / (H / Hkv)) * k_shape[2] * D;
     const int group_last = min(S - T + qb * BQ + BQ - 1, S - 1);
     const int r = lane / 4, part = lane % 4;                // this lane's softmax row and column quarter
     const int i = qb * BQ + sg * 8 + r, last = S - T + i;
@@ -169,24 +131,23 @@ _V3 = _SHAPES + """
 """
 
 _KERNELS = {
-    name: mx.fast.metal_kernel(name=f"stackgrad_attention_{name}", input_names=["q", "k", "v"],
+    name: mx.fast.metal_kernel(name=f"stackgrad_attention_{name}", input_names=["q", "k", "v", "n"],
                                output_names=["out", "lse"], source=src)
-    for name, src in [("v1", _V1), ("v2", _V2), ("v3", _V3)]
+    for name, src in [("v1", _V1), ("v3", _V3)]
 }
 
 
-def attention(q, k, v, version="v3"):
-  """Causal attention: q (B, H, T, D), k, v (B, Hkv, S, D) -> out (B, H, T, D), lse (B, H, T)."""
+def attention(q, k, v, version="v3", n=None):
+  """Causal attention over the first n of k, v's (B, Hkv, S, D) positions, all S if None: q (B, H, T, D) -> out (B, H, T, D), lse (B, H, T)."""
   B, H, T, D = q.shape
   assert k.shape[1] and H % k.shape[1] == 0 and D % 8 == 0 and D <= 128, (q.shape, k.shape)
   bk = 32 if D <= 64 else 16  # keeps the K/V tiles within 32 KB of threadgroup memory
   if version == "v1":
-    grid, group = (B * H * T, 1, 1), (min(256, B * H * T), 1, 1)
+    grid, group = (B * H * T * D, 1, 1), (D, 1, 1)
   else:
-    threads = 32 if version == "v2" else 128
-    grid, group = (B * H * -(-T // 32) * threads, 1, 1), (threads, 1, 1)
+    grid, group = (B * H * -(-T // 32) * 128, 1, 1), (128, 1, 1)
   return _KERNELS[version](
-      inputs=[q, k, v],
+      inputs=[q, k, v, mx.array([k.shape[2]]) if n is None else n],
       template=[("InT", q.dtype), ("D", D), ("BK", bk)],
       grid=grid,
       threadgroup=group,

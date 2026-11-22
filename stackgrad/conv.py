@@ -1,5 +1,6 @@
 import numpy as np
 
+from .layers import normal
 from .module import Module
 from .tensor import Tensor
 
@@ -19,10 +20,7 @@ class Conv2d(Module):
     assert kh > 0 and kw > 0, "kernel_size must be positive"
     fan_in = in_channels * kh * kw
     scale = np.sqrt(2.0 / fan_in)
-    self.weight = Tensor(
-        (np.random.randn(out_channels, in_channels * kh * kw) * scale).astype(np.float32),
-        requires_grad=True
-    )
+    self.weight = Tensor(normal((out_channels, in_channels * kh * kw), scale), requires_grad=True)
     self.bias = Tensor(np.zeros(out_channels, dtype=np.float32), requires_grad=True)
 
   def forward(self, x):

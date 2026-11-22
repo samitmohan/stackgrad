@@ -305,17 +305,17 @@ class Attention(Function):
     T, S = q.shape[2], k.shape[2]
     k = xp.repeat(k, q.shape[1] // k.shape[1], axis=1)
     s = q @ k.swapaxes(-1, -2) * q.shape[-1] ** -0.5
-    if self.causal:  # query i sits at position S - T + i (kv cache)
-      s = s + xp.triu(xp.full((T, S), -xp.inf, dtype=q.dtype), k=S - T + 1)
+    if self.causal:  # query i sits at position n - T + i (kv cache): later keys, and a cache's unwritten slots, are hidden
+      s = s + xp.where(xp.asarray(np.arange(S) - np.arange(T)[:, None]) > self.n - T, -xp.inf, 0.0).astype(q.dtype)
     if self.key_bias is not None:
       s = s + xp.asarray(self.key_bias, dtype=q.dtype)[:, None, None, :]
     return s
 
-  def forward(self, q, k, v, key_bias=None, causal=True):
-    """key_bias: optional (B, S) array added to each key's score (left-padding mask)."""
-    self.key_bias, self.causal = key_bias, causal
+  def forward(self, q, k, v, key_bias=None, causal=True, n=None):
+    """key_bias: optional (B, S) array added to each key's score (left-padding mask); n: keys written, all S if None."""
+    self.key_bias, self.causal, self.n = key_bias, causal, k.shape[2] if n is None else n
     fused = getattr(self.xp, "fused_attention", None) if key_bias is None and causal else None  # the kernels take no mask
-    out = fused(q, k, v) if fused else None
+    out = fused(q, k, v, self.n) if fused else None
     self.p = None
     if out is None:
       s = self.scores(q, k)
@@ -345,8 +345,20 @@ class Attention(Function):
     # each kv head sums the grads of the `rep` query heads it served
     return dq, dk.reshape(B, Hkv, rep, S, D).sum(axis=2), dv.reshape(B, Hkv, rep, S, D).sum(axis=2)
 
-  def out_shape(self, q, k, v, key_bias=None, causal=True):
+  def out_shape(self, q, k, v, **kwargs):
     return q[:-1] + v[-1:]
 
-  def out_dtype(self, q, k, v, key_bias=None, causal=True):
+  def out_dtype(self, q, k, v, **kwargs):
     return q
+
+
+class Write(Function):
+  """buf with x written along axis 2 from position pos: a KV cache's next slots, in place where the backend allows."""
+  def forward(self, buf, x, pos):
+    if hasattr(self.xp, "write"):  # Metal's, which also takes pos as an array, inside a compiled trace
+      return self.xp.write(buf, x, pos)
+    buf[:, :, pos:pos + x.shape[2]] = x
+    return buf
+
+  def out_shape(self, buf, x, pos):
+    return buf

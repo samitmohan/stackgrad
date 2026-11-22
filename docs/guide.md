@@ -89,8 +89,9 @@ and a split that uneven comes up 13% of the time by chance alone. Totals hide ch
 
 **Predict, then measure, then explain the gap.** Counting matrix products predicts attention's backward at 4.4 times its
 forward. The profiler measured 14.5. The gap is memory traffic the count ignores, and closing it is what FlashAttention
-is for. Speculative decoding gained only 1.07x because the draft model costs 61% of the target per step; the arithmetic
-of launches predicts that, once you count launches.
+is for. Speculative decoding lost (0.97x at best, `speculative_metal.json`) even with a draft that costs 42% of the target per
+step, because its multi-token verify pass runs on the slower general attention kernel; the arithmetic predicts that, once
+you time each pass.
 
 **Measure on a quiet machine.** The same Stable Diffusion step took 2.55 s on an idle laptop and 18.7 to 21.6 s while
 the system was swapping. An API server stopped by killing its `uv run` wrapper left its Python child holding 2.4 GB for nine
@@ -183,7 +184,7 @@ Everything else composes them.
 
 - Read `stackgrad/backend/metal_attention.py` (three versions, each fixing the last one's bottleneck),
   `stackgrad/backend/cuda_attention.py` (FlashAttention-2 in Triton), and `stackgrad/profile.py`.
-- Rebuild the one-pass softmax on paper first (the post's worked example with scores 1, 3, 2), then kernel v1, then v2.
+- Rebuild the one-pass softmax on paper first (the post's worked example with scores 1, 3, 2), then kernel v1, then v3 (v2, a tiled middle step, was deleted once v3 beat it at every shape).
 - Check with `uv run python tests/backends.py --device metal` (every kernel against a 64-bit reference), then
   `uv run python bench/flash_attention.py` and `uv run python bench/profile_step.py --device metal`.
 - Predict attention's backward-to-forward cost ratio by counting matrix products, before reading the profile.
@@ -274,7 +275,7 @@ An interviewer will ask some version of these. Answer each in a few sentences, w
 9. Why does decode speed depend on memory bandwidth more than on arithmetic, and what sets the ceiling?
 10. What does a paged KV cache save over reserving the maximum length per request, and what does it cost?
 11. Why did int4 weights speed up the decode step by much less than they cut its bytes?
-12. Why does speculative decoding leave the output distribution unchanged, and why did it gain only 1.07x here?
+12. Why does speculative decoding leave the output distribution unchanged, and why did it lose here (0.97x)?
 13. Why does LoRA start from exactly the base model, and why did it make the model worse at GSM8K?
 14. What is a group-normalized advantage, and how did the first GRPO reward get gamed?
 15. How does a paired sign test work, and what did it say about GRPO's 139 against 152?

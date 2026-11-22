@@ -35,29 +35,21 @@ class StackgradRunner:
 
   def _join(self, seq_ids):
     rows = [self.caches.pop(s) for s in seq_ids]
-    lengths = np.array([len(r[0]) for r in rows])
+    lengths = np.array([r[0].n for r in rows])
     self.pad = lengths.max() - lengths
     device = rows[0][0].k.device
     xp = backend.get(device)
 
     def padded(layer, name):
-      parts = [xp.pad(getattr(r[layer], name).data, ((0, 0), (0, 0), (int(p), 0), (0, 0))) for r, p in zip(rows, self.pad)]
+      parts = [xp.pad(getattr(r[layer], name).data[:, :, :n], ((0, 0), (0, 0), (p, 0), (0, 0)))
+               for r, n, p in zip(rows, lengths.tolist(), self.pad.tolist())]
       return Tensor(xp.concatenate(parts), device=device)
 
-    self.batched = []
-    for i in range(len(self.model.blocks)):
-      cache = KVCache()
-      cache.k, cache.v = padded(i, "k"), padded(i, "v")
-      self.batched.append(cache)
+    self.batched = [KVCache(padded(i, "k"), padded(i, "v"), int(lengths.max())) for i in range(len(self.model.blocks))]
     self.batch = tuple(seq_ids)
 
   def _split(self):
     for b, s in enumerate(self.batch):
       p = int(self.pad[b])
-      self.caches[s] = []
-      for cache in self.batched:
-        own = KVCache()
-        own.k = Tensor(cache.k.data[b:b + 1, :, p:], device=cache.k.device)
-        own.v = Tensor(cache.v.data[b:b + 1, :, p:], device=cache.v.device)
-        self.caches[s].append(own)
+      self.caches[s] = [KVCache(*(Tensor(t.data[b:b + 1, :, p:c.n], device=t.device) for t in (c.k, c.v)), c.n - p) for c in self.batched]
     self.batch, self.batched, self.pad = (), None, None

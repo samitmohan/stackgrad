@@ -1,11 +1,12 @@
 import numpy as np
 
-from .attention import Attention, KVCache
+from . import backend
+from .attention import Attention, KVCache, rope_tables
 from .checkpoint import checkpoint
-from .layers import DepthAttention, Embedding, Linear, RMSNorm, SiLUMLP, SwiGLU
+from .layers import SKIP_INIT, DepthAttention, Embedding, Linear, RMSNorm, SiLUMLP, SwiGLU
 from .module import Module
 from .sampling import sample, sample_on_device
-from .tensor import no_grad
+from .tensor import Tensor, grad_enabled, no_grad
 
 
 def trunc_normal(shape, std):
@@ -59,8 +60,9 @@ class TransformerLM(Module):
     self.head = None if tie_embeddings else Linear(d_model, vocab_size, bias=False)
     self.checkpoint_blocks = False  # recompute each block in backward instead of storing its activations
 
-    # CS336 init
-    for p in self.parameters():
+    if getattr(SKIP_INIT, "on", False):  # a checkpoint will overwrite every weight
+      return
+    for p in self.parameters():  # CS336 init
       if p.ndim == 2:
         p.data = trunc_normal(p.shape, np.sqrt(2.0 / sum(p.shape)))
     self.embed.weight.data = trunc_normal(self.embed.weight.shape, 1.0)
@@ -72,15 +74,38 @@ class TransformerLM(Module):
   def hidden(self, idx, caches=None, pad=None):
     """Final normalized hidden states (B, T, d_model): the model without the output projection."""
     x = self.embed(idx)
+    if getattr(backend.get(x.device), "capture", None) and caches and caches[0].n and pad is None and not grad_enabled():
+      return self._decode(x, caches)
+    return self._layers(x, caches, pad)
+
+  def _layers(self, x, caches, pad=None):
     if self.depth is not None:
       x = self.attn_res(x, caches, pad)
-      return x if self.norm is None else self.norm(x)
-    for i, block in enumerate(self.blocks):
-      if self.checkpoint_blocks and caches is None and pad is None:
-        x = checkpoint(block, x)
-      else:
-        x = block(x, None if caches is None else caches[i], pad)
+    else:
+      for i, block in enumerate(self.blocks):
+        if self.checkpoint_blocks and caches is None and pad is None:
+          x = checkpoint(block, x)
+        else:
+          x = block(x, None if caches is None else caches[i], pad)
     return x if self.norm is None else self.norm(x)
+
+  # a decode step replays one compiled trace of every block and the final norm: it compiles once per shape, and the caches keep
+  # theirs until they grow; it bakes in the weights, so it lives on the first cache, as long as the caches do
+  def _decode(self, x, caches):
+    T, first, a = x.shape[1], caches[0], self.blocks[0].attn
+    for c in caches:
+      c.reserve(T)
+    if first.trace is None:
+      first.trace = backend.get(x.device).capture(self._step)
+    cos, sin = rope_tables(first.n, T, a.head_dim, a.rope_theta)
+    h, *kv = first.trace(x, x._const(cos), x._const(sin), Tensor([first.n], device=x.device), *[t for c in caches for t in (c.k, c.v)])
+    for i, c in enumerate(caches):
+      c.k, c.v, c.n = kv[2 * i], kv[2 * i + 1], c.n + T
+    return h
+
+  def _step(self, x, cos, sin, n, *kv):
+    caches = [KVCache(k, v, n.data, (cos, sin)) for k, v in zip(kv[::2], kv[1::2])]
+    return [self._layers(x, caches), *[t for c in caches for t in (c.k, c.v)]]
 
   def attn_res(self, x, caches=None, pad=None):
     """Block Attention Residuals over the embedding x: the hidden states before the final norm."""

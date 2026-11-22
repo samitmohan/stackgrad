@@ -4,14 +4,14 @@
  "group": 64,
  "window": 512,
  "tokens_per_text": 6144,
- "bandwidth_gb_s": 100.4,
+ "bandwidth_gb_s": 101.4,
  "rows": [
   {
    "precision": "bfloat16",
    "weight_mb": 1192.0,
-   "decode_ms_per_token": 24.7,
-   "decode_tokens_per_s": 40.5,
-   "ceiling_tokens_per_s": 84.2,
+   "decode_ms_per_token": 14.4,
+   "decode_tokens_per_s": 69.5,
+   "ceiling_tokens_per_s": 85.0,
    "perplexity": {
     "gsm8k": 4.269,
     "tinystories": 10.576
@@ -20,118 +20,118 @@
   {
    "precision": "int8",
    "weight_mb": 633.2,
-   "decode_ms_per_token": 27.8,
-   "decode_tokens_per_s": 35.9,
-   "ceiling_tokens_per_s": 158.5,
+   "decode_ms_per_token": 21.3,
+   "decode_tokens_per_s": 46.9,
+   "ceiling_tokens_per_s": 160.1,
    "perplexity": {
     "gsm8k": 4.281,
     "tinystories": 10.582
    },
-   "decode_ms_per_token_mlx_kernel": 27.5
+   "decode_ms_per_token_mlx_kernel": 21.3
   },
   {
    "precision": "int4",
    "weight_mb": 335.2,
-   "decode_ms_per_token": 20.9,
-   "decode_tokens_per_s": 47.9,
-   "ceiling_tokens_per_s": 299.4,
+   "decode_ms_per_token": 12.1,
+   "decode_tokens_per_s": 82.8,
+   "ceiling_tokens_per_s": 302.3,
    "perplexity": {
     "gsm8k": 5.094,
     "tinystories": 14.263
    },
-   "decode_ms_per_token_mlx_kernel": 19.9
+   "decode_ms_per_token_mlx_kernel": 11.6
   }
  ],
  "kernels": [
   {
    "matrix": "output head",
    "impl": "bfloat16",
-   "us": 3297.2,
-   "gb_s": 94.4
+   "us": 3218.9,
+   "gb_s": 96.7
   },
   {
    "matrix": "output head",
    "impl": "int8 stackgrad",
-   "us": 1820.1,
-   "gb_s": 90.8
+   "us": 1654.3,
+   "gb_s": 99.9
   },
   {
    "matrix": "output head",
    "impl": "int8 MLX",
-   "us": 1619.7,
-   "gb_s": 102.1
+   "us": 1563.9,
+   "gb_s": 105.7
   },
   {
    "matrix": "output head",
    "impl": "int4 stackgrad",
-   "us": 888.3,
+   "us": 863.6,
+   "gb_s": 101.3
+  },
+  {
+   "matrix": "output head",
+   "impl": "int4 MLX",
+   "us": 823.2,
+   "gb_s": 106.3
+  },
+  {
+   "matrix": "feed-forward up",
+   "impl": "bfloat16",
+   "us": 56.6,
+   "gb_s": 111.1
+  },
+  {
+   "matrix": "feed-forward up",
+   "impl": "int8 stackgrad",
+   "us": 32.7,
+   "gb_s": 102.3
+  },
+  {
+   "matrix": "feed-forward up",
+   "impl": "int8 MLX",
+   "us": 30.6,
+   "gb_s": 109.4
+  },
+  {
+   "matrix": "feed-forward up",
+   "impl": "int4 stackgrad",
+   "us": 33.3,
+   "gb_s": 53.2
+  },
+  {
+   "matrix": "feed-forward up",
+   "impl": "int4 MLX",
+   "us": 26.1,
+   "gb_s": 67.7
+  },
+  {
+   "matrix": "feed-forward down",
+   "impl": "bfloat16",
+   "us": 60.3,
+   "gb_s": 104.4
+  },
+  {
+   "matrix": "feed-forward down",
+   "impl": "int8 stackgrad",
+   "us": 38.1,
+   "gb_s": 87.6
+  },
+  {
+   "matrix": "feed-forward down",
+   "impl": "int8 MLX",
+   "us": 33.9,
    "gb_s": 98.5
   },
   {
-   "matrix": "output head",
-   "impl": "int4 MLX",
-   "us": 868.8,
-   "gb_s": 100.7
-  },
-  {
-   "matrix": "feed-forward up",
-   "impl": "bfloat16",
-   "us": 57.0,
-   "gb_s": 110.3
-  },
-  {
-   "matrix": "feed-forward up",
-   "impl": "int8 stackgrad",
-   "us": 38.7,
-   "gb_s": 86.4
-  },
-  {
-   "matrix": "feed-forward up",
-   "impl": "int8 MLX",
-   "us": 28.3,
-   "gb_s": 118.1
-  },
-  {
-   "matrix": "feed-forward up",
-   "impl": "int4 stackgrad",
-   "us": 23.7,
-   "gb_s": 74.6
-  },
-  {
-   "matrix": "feed-forward up",
-   "impl": "int4 MLX",
-   "us": 18.9,
-   "gb_s": 93.6
-  },
-  {
-   "matrix": "feed-forward down",
-   "impl": "bfloat16",
-   "us": 60.6,
-   "gb_s": 103.9
-  },
-  {
-   "matrix": "feed-forward down",
-   "impl": "int8 stackgrad",
-   "us": 34.1,
-   "gb_s": 98.1
-  },
-  {
-   "matrix": "feed-forward down",
-   "impl": "int8 MLX",
-   "us": 31.2,
-   "gb_s": 107.2
-  },
-  {
    "matrix": "feed-forward down",
    "impl": "int4 stackgrad",
-   "us": 23.9,
-   "gb_s": 74.1
+   "us": 28.8,
+   "gb_s": 61.3
   },
   {
    "matrix": "feed-forward down",
    "impl": "int4 MLX",
-   "us": 22.1,
-   "gb_s": 80.1
+   "us": 21.8,
+   "gb_s": 81.3
   }
  ]
 }
